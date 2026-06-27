@@ -1,3 +1,5 @@
+<!-- mcp-name: com.smplkit/mcp -->
+
 # smplkit MCP Server
 
 A hosted, agent-native [Model Context Protocol](https://modelcontextprotocol.io)
