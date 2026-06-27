@@ -124,6 +124,12 @@ def test_default_environment_constant():
     assert tools.DEFAULT_ENVIRONMENT == "production"
 
 
+def test_server_identity_is_platform_level():
+    # Platform identity, not Jobs-specific (the name clients show on initialize).
+    assert server.mcp.name == "smplkit MCP Server"
+    assert "smplkit platform" in server.INSTRUCTIONS
+
+
 # -- custom routes ----------------------------------------------------------
 
 

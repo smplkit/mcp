@@ -1,7 +1,7 @@
 [project]
 name = "smplkit-mcp"
 version = "0.1.0"
-description = "Agent-native MCP server for smplkit Jobs (ADR-057)."
+description = "Agent-native MCP server for the smplkit platform (ADR-057)."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

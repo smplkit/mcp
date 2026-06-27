@@ -9,9 +9,24 @@ through the standard CloudFront -> ALB ``/api/*`` pattern (ADR-011).
 """
 from __future__ import annotations
 
+import base64
+from pathlib import Path
+
 import pulumi
 
-from smplkit_infra import LandingPageConfig, ProductServiceStack
+from smplkit_infra import ProductServiceStack
+
+# ---------------------------------------------------------------------------
+# Branded landing page (platform identity, not Jobs-specific)
+# ---------------------------------------------------------------------------
+# The page is self-contained: the official dark-mode smplkit logo (a bundled
+# static asset) is inlined as a data URI so the served HTML has no external
+# dependencies.
+_STATIC = Path(__file__).resolve().parent.parent / "static"
+_logo_b64 = base64.b64encode((_STATIC / "smplkit-logo.png").read_bytes()).decode("ascii")
+_landing_html = (_STATIC / "landing.html").read_text(encoding="utf-8").replace(
+    "__LOGO_SRC__", f"data:image/png;base64,{_logo_b64}"
+)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -47,10 +62,7 @@ stack = ProductServiceStack(
     environment_variables={
         "JOBS_BASE_DOMAIN": jobs_base_domain,
     },
-    landing_page_config=LandingPageConfig(
-        service_display_name="Smpl Jobs MCP",
-        github_repo="mcp",
-    ),
+    landing_page_html=_landing_html,
     # Hub references.
     vpc_id=platform.require_output("vpc_id"),
     vpc_cidr=platform.require_output("vpc_cidr"),

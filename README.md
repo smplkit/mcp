@@ -1,9 +1,12 @@
-# smplkit Jobs MCP server
+# smplkit MCP Server
 
 A hosted, agent-native [Model Context Protocol](https://modelcontextprotocol.io)
-server that lets an AI agent (Claude Code, Claude Desktop, Cursor, …) create,
-run, and monitor scheduled HTTP jobs on [smplkit](https://smplkit.com) — without
+server — the gateway that lets an AI agent (Claude Code, Claude Desktop, Cursor,
+…) operate the [smplkit](https://smplkit.com) platform on your behalf, without
 you ever leaving the chat. Implements ADR-057.
+
+**Available now: Smpl Jobs** — create, run, and monitor scheduled HTTP jobs. More
+of the smplkit platform will be exposed here over time.
 
 The magic moment: connect once, then say *"POST my endpoint every morning at
 7."* The agent creates a recurring job, fires one run on the spot to prove it (a

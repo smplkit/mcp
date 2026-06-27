@@ -30,16 +30,18 @@ APP_VERSION = os.environ.get("APP_VERSION", "dev")
 SETTINGS = load_settings()
 
 INSTRUCTIONS = (
-    "Create, run, and monitor scheduled HTTP jobs on smplkit. Use create_job to "
-    "schedule a request (a cron `schedule` makes it recurring; a `run_at` "
-    "datetime makes it run once; neither makes it manual/on-demand). Use run_job "
-    "to fire a job immediately and prove it works — it returns the captured "
-    "response. Use list_runs/get_run to monitor (e.g. status=FAILED answers 'has "
-    "anything failed?'). The target URL must be reachable from the public internet."
+    "The agent gateway to the smplkit platform — it exposes smplkit's capabilities "
+    "as tools you can call on the user's behalf. Available now: Smpl Jobs "
+    "(scheduled HTTP jobs); more of the platform will be added here over time. "
+    "Use create_job to schedule a request (a cron `schedule` makes it recurring; a "
+    "`run_at` datetime makes it run once; neither makes it manual/on-demand), "
+    "run_job to fire a job immediately and prove it works (it returns the captured "
+    "response), and list_runs/get_run to monitor (e.g. status=FAILED answers 'has "
+    "anything failed?'). Job target URLs must be reachable from the public internet."
 )
 
 mcp: FastMCP = FastMCP(
-    name="smplkit Jobs",
+    name="smplkit MCP Server",
     instructions=INSTRUCTIONS,
     version=APP_VERSION,
     # Mask unexpected internal exceptions; user-facing detail is raised as a
