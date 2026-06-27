@@ -53,24 +53,26 @@ jobs:
       - name: Acceptance tests (all eight tools vs live Jobs API)
         # Provisions an ephemeral verified account via the admin API and drives
         # every tool end-to-end (ADR-057 magic moment). Self-skips when
-        # ADMIN_API_KEY is not available to this repo.
+        # ADMIN_API_KEY is not available to this repo (it is a private-only org
+        # secret, so the public repo skips; the suite runs locally and in the
+        # private deploy path).
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
         run: pytest -m acceptance -v
 
-  deploy:
+  # Version resolution + git tag + GitHub release stay in this (public) repo:
+  # they are about this repo's own release identity and use the built-in
+  # GITHUB_TOKEN, which can write here but nowhere else. semantic-release is run
+  # inline (the pip tool) rather than via the smplkit/.github composite action,
+  # because a public repo cannot resolve a private-repo action.
+  release:
     needs: [ci, acceptance]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: write
-    concurrency:
-      group: deploy-${{ github.repository_owner }}-${{ github.event.repository.name }}-production
-      cancel-in-progress: false
-    env:
-      AWS_REGION: us-east-1
-      PULUMI_STACK: smplkit/mcp/production
+    outputs:
+      app-version: ${{ steps.version.outputs.app-version }}
     steps:
       - name: Check out code
         uses: actions/checkout@v6
@@ -82,98 +84,54 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Resolve version
+      - name: Resolve version, tag, and release
         id: version
-        uses: smplkit/.github/actions/python-semantic-release@main
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      # The Docker image has no smplkit-core dependency (ADR-057), so the image
-      # build needs no CodeArtifact. The *infra* program does: smplkit-infra is
-      # published to CodeArtifact, so authenticate pip before installing it.
-      - name: Authenticate pip with CodeArtifact (for smplkit-infra)
-        uses: smplkit/.github/actions/codeartifact-auth@main
-        with:
-          mode: login
-
-      - name: Install Pulumi CLI
-        uses: pulumi/actions@v7
-
-      - name: Install Pulumi dependencies
-        run: pip install -r infra/requirements.txt
-
-      - name: Log in and select stack (create on first deploy)
-        working-directory: infra
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pulumi login
-          pulumi stack select "${PULUMI_STACK}" --create
+          pip install python-semantic-release
+          git fetch --tags origin
+          NEW_VERSION=$(semantic-release version --print 2>/dev/null || true)
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          LATEST_VERSION="${LATEST_TAG#v}"
 
-      - name: Bootstrap base infrastructure on first deploy
-        working-directory: infra
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-        run: |
-          # On the first ever deploy the ECR repository (and the rest of the
-          # base infra) does not exist yet, so there is no repositoryUrl to
-          # build against. Create it once here; on subsequent deploys the output
-          # already exists and this is a no-op.
-          if ! pulumi stack output repositoryUrl >/dev/null 2>&1; then
-            echo "First deploy: creating base infrastructure (ECR, ALB, CloudFront, DNS)..."
-            pulumi up --yes --skip-preview
+          if [ -z "$NEW_VERSION" ] || [ "$NEW_VERSION" = "$LATEST_VERSION" ]; then
+            echo "No release needed; deploying existing version ${LATEST_VERSION:-dev}"
+            echo "app-version=${LATEST_VERSION:-dev}" >> "$GITHUB_OUTPUT"
+          elif git rev-parse "v${NEW_VERSION}" >/dev/null 2>&1; then
+            echo "::error::Tag collision: v${NEW_VERSION} exists but is not latest (latest: ${LATEST_TAG:-none})."
+            exit 1
+          else
+            echo "New release: v${NEW_VERSION}"
+            git tag "v${NEW_VERSION}"
+            git push origin "v${NEW_VERSION}"
+            gh release create "v${NEW_VERSION}" --generate-notes
+            echo "app-version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Read infrastructure outputs
-        id: stack
-        working-directory: infra
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-        run: |
-          pulumi stack output --json > stack.json
-          echo "ecr_repo=$(jq -r '.repositoryUrl' stack.json)" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push Docker image
-        id: docker-image
-        uses: smplkit/.github/actions/ecr-build-push@main
+  # Thin trigger: mint a tightly-scoped GitHub App token (actions:write on
+  # smplkit/mcp-private only) and dispatch the privileged deploy there. No AWS,
+  # Pulumi, or admin credentials — and no private-repo actions — live in this
+  # public repo. If this token leaked, the most it could do is start a deploy.
+  trigger-deploy:
+    needs: [release]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint deploy-trigger App token (scoped to mcp-private)
+        id: app-token
+        uses: actions/create-github-app-token@v2
         with:
-          ecr-repository-url: ${{ steps.stack.outputs.ecr_repo }}
-          build-args: |
-            APP_VERSION=${{ steps.version.outputs.app-version }}
-          additional-tags: |
-            ${{ steps.version.outputs.app-version }}
-            latest
+          app-id: ${{ secrets.DEPLOY_TRIGGER_APP_ID }}
+          private-key: ${{ secrets.DEPLOY_TRIGGER_PRIVATE_KEY }}
+          owner: smplkit
+          repositories: mcp-private
 
-      - name: Update Pulumi config
-        working-directory: infra
+      - name: Dispatch deploy in smplkit/mcp-private
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          pulumi config set mcp:imageTag "${{ github.sha }}" --stack "${PULUMI_STACK}"
-
-      - name: Refresh Pulumi state
-        working-directory: infra
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-        run: pulumi refresh --yes --skip-preview
-
-      - name: Deploy infrastructure
-        working-directory: infra
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-        run: pulumi up --yes --skip-preview
-
-      - name: Deploy summary
-        run: |
-          echo "## Deploy" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Commit:** ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Image:** ${{ steps.docker-image.outputs.image-uri }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "**URL:** https://mcp.smplkit.com" >> "$GITHUB_STEP_SUMMARY"
-          echo "**MCP endpoint:** https://mcp.smplkit.com/api/mcp" >> "$GITHUB_STEP_SUMMARY"
+          gh workflow run deploy.yml \
+            --repo smplkit/mcp-private \
+            --field sha="${{ github.sha }}" \
+            --field app-version="${{ needs.release.outputs.app-version }}"
