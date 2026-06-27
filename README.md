@@ -3,7 +3,7 @@
 A hosted, agent-native [Model Context Protocol](https://modelcontextprotocol.io)
 server — the gateway that lets an AI agent (Claude Code, Claude Desktop, Cursor,
 …) operate the [smplkit](https://smplkit.com) platform on your behalf, without
-you ever leaving the chat. Implements ADR-057.
+you ever leaving the chat.
 
 **Available now: Smpl Jobs** — create, run, and monitor scheduled HTTP jobs. More
 of the smplkit platform will be exposed here over time.
@@ -33,7 +33,7 @@ header is also accepted).
 **Claude Code** (CLI):
 
 ```bash
-claude mcp add --transport http smplkit-jobs https://mcp.smplkit.com/api/mcp \
+claude mcp add --transport http smplkit https://mcp.smplkit.com/api/mcp \
   --header "Authorization: Bearer YOUR_SMPLKIT_API_KEY"
 ```
 
@@ -42,7 +42,7 @@ claude mcp add --transport http smplkit-jobs https://mcp.smplkit.com/api/mcp \
 ```json
 {
   "mcpServers": {
-    "smplkit-jobs": {
+    "smplkit": {
       "type": "http",
       "url": "https://mcp.smplkit.com/api/mcp",
       "headers": { "Authorization": "Bearer ${SMPLKIT_API_KEY}" }
@@ -56,7 +56,7 @@ claude mcp add --transport http smplkit-jobs https://mcp.smplkit.com/api/mcp \
 ```json
 {
   "mcpServers": {
-    "smplkit-jobs": {
+    "smplkit": {
       "url": "https://mcp.smplkit.com/api/mcp",
       "headers": { "Authorization": "Bearer ${env:SMPLKIT_API_KEY}" }
     }
@@ -71,7 +71,7 @@ colon** in `args` (a known mcp-remote quirk); the spaced value goes in `env`:
 ```json
 {
   "mcpServers": {
-    "smplkit-jobs": {
+    "smplkit": {
       "command": "npx",
       "args": [
         "-y", "mcp-remote", "https://mcp.smplkit.com/api/mcp",
@@ -123,7 +123,7 @@ this flow.
 
 ```bash
 python3.13 -m venv .venv && . .venv/bin/activate
-pip install -r requirements-test.txt          # add: --index-url https://pypi.org/simple/
+pip install -r requirements-test.txt
 pytest                                          # unit tests (acceptance deselected)
 ruff check src tests
 ```
@@ -146,9 +146,11 @@ Configuration (env vars):
 ### Acceptance tests
 
 `tests/test_acceptance.py` provisions an ephemeral verified account, drives all
-eight tools against a real Jobs service (the ADR-057 magic moment), and cleans
-up. It self-skips unless a smplkit **admin** key is available (`ADMIN_API_KEY`
-env or the `[admin]` profile in `~/.smplkit`). Run it explicitly:
+eight tools against a real Jobs service end-to-end, and cleans up. These tests
+require smplkit-internal **admin** credentials, so they self-skip unless an admin
+key is available (`ADMIN_API_KEY` env or the `[admin]` profile in `~/.smplkit`) —
+external contributors can ignore them; the unit suite needs no credentials. Run
+them explicitly:
 
 ```bash
 pytest -m acceptance
@@ -157,12 +159,14 @@ pytest -m acceptance
 
 ## Architecture
 
-- **Stateless** Python + [FastMCP](https://gofastmcp.com) service on Fargate
-  behind the ALB, deployed via Pulumi (`infra/`) reusing `ProductServiceStack`
-  from `smplkit-infra` — no worker, no database.
-- The MCP endpoint is served under `/api/mcp` so it routes through the standard
-  CloudFront → ALB pattern; the transport is stateless with JSON responses (no
-  long-lived SSE) so it behaves through proxies with short idle timeouts.
-- Auth is **per request**: the customer's API key arrives as a header, is
-  forwarded as the `Bearer` token to the Jobs API, and is never cached or logged.
-- CI builds the image (tagged by commit SHA) and `pulumi up`s on push to `main`.
+- **Stateless** Python service built on [FastMCP](https://gofastmcp.com): it holds
+  no database and no platform credential of its own.
+- Auth is **per request** — your API key arrives as a header, is forwarded as the
+  `Bearer` token to the smplkit API, and is never cached or logged.
+- The MCP endpoint is served under `/api/mcp` with a stateless, JSON-response
+  transport (no long-lived SSE), so it behaves correctly through proxies and load
+  balancers with short idle timeouts.
+
+## License
+
+[MIT](LICENSE).

@@ -1,8 +1,9 @@
 [project]
 name = "smplkit-mcp"
 version = "0.1.0"
-description = "Agent-native MCP server for the smplkit platform (ADR-057)."
+description = "Hosted MCP server for the smplkit platform — schedule and run HTTP jobs from your AI agent."
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.13"
 dependencies = [
   "fastmcp>=3.4.0,<4.0.0",
