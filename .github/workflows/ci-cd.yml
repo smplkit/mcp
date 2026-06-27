@@ -73,6 +73,7 @@ jobs:
       contents: write
     outputs:
       app-version: ${{ steps.version.outputs.app-version }}
+      is-new-release: ${{ steps.version.outputs.is-new-release }}
     steps:
       - name: Check out code
         uses: actions/checkout@v6
@@ -98,6 +99,7 @@ jobs:
           if [ -z "$NEW_VERSION" ] || [ "$NEW_VERSION" = "$LATEST_VERSION" ]; then
             echo "No release needed; deploying existing version ${LATEST_VERSION:-dev}"
             echo "app-version=${LATEST_VERSION:-dev}" >> "$GITHUB_OUTPUT"
+            echo "is-new-release=false" >> "$GITHUB_OUTPUT"
           elif git rev-parse "v${NEW_VERSION}" >/dev/null 2>&1; then
             echo "::error::Tag collision: v${NEW_VERSION} exists but is not latest (latest: ${LATEST_TAG:-none})."
             exit 1
@@ -107,6 +109,7 @@ jobs:
             git push origin "v${NEW_VERSION}"
             gh release create "v${NEW_VERSION}" --generate-notes
             echo "app-version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "is-new-release=true" >> "$GITHUB_OUTPUT"
           fi
 
   # Thin trigger: mint a tightly-scoped GitHub App token (actions:write on
@@ -136,3 +139,34 @@ jobs:
             --ref main \
             --field sha="${{ github.sha }}" \
             --field app-version="${{ needs.release.outputs.app-version }}"
+
+  # Publish this remote server to the official MCP Registry on each new release.
+  # Runs as a release-gated job (not a tags:["v*"] workflow) because the release
+  # job creates the tag with GITHUB_TOKEN, and GitHub does not fire tag-triggered
+  # workflows from GITHUB_TOKEN pushes. The registry is in preview, so this is
+  # best-effort (continue-on-error) and never blocks the release or deploy.
+  # Auth is DNS-namespace (com.smplkit) via the low-power MCP_PRIVATE_KEY secret,
+  # whose only capability is publishing this server to the registry.
+  publish-registry:
+    needs: [release]
+    if: github.ref == 'refs/heads/main' && needs.release.outputs.is-new-release == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Sync server.json version to the release
+        run: |
+          jq --arg v "${{ needs.release.outputs.app-version }}" '.version = $v' server.json > server.tmp
+          mv server.tmp server.json
+
+      - name: Authenticate to MCP Registry (DNS, com.smplkit)
+        run: ./mcp-publisher login dns --domain smplkit.com --private-key "${{ secrets.MCP_PRIVATE_KEY }}"
+
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish

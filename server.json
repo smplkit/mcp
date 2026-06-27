@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.smplkit/mcp",
+  "title": "smplkit MCP Server",
+  "description": "Schedule HTTP jobs from your AI agent — cron, one-off, or on-demand, with response capture.",
+  "version": "0.1.2",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.smplkit.com/api/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Your smplkit API key as a bearer token, sent as `Authorization: Bearer <key>`. Mint one at smplkit.com (sign in with Google or Microsoft, then create an API key).",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
