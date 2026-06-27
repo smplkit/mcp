@@ -52,7 +52,7 @@ jobs:
 
       - name: Acceptance tests (all eight tools vs live Jobs API)
         # Provisions an ephemeral verified account via the admin API and drives
-        # every tool end-to-end (ADR-057 magic moment). Self-skips when
+        # every tool end-to-end. Self-skips when
         # ADMIN_API_KEY is not available to this repo (it is a private-only org
         # secret, so the public repo skips; the suite runs locally and in the
         # private deploy path).

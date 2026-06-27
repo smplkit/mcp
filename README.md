@@ -8,10 +8,10 @@ you ever leaving the chat.
 **Available now: Smpl Jobs** — create, run, and monitor scheduled HTTP jobs. More
 of the smplkit platform will be exposed here over time.
 
-The magic moment: connect once, then say *"POST my endpoint every morning at
-7."* The agent creates a recurring job, fires one run on the spot to prove it (a
-real `200` with the captured response body), and can answer *"has anything
-failed?"* from run history.
+Once connected, tell your agent *"POST my endpoint every morning at 7."* It
+creates the recurring job, runs it once on the spot to prove it works (a real
+`200` with the captured response body), and later answers *"has anything
+failed?"* straight from run history.
 
 It is a thin, **stateless** HTTP client to the smplkit Jobs API. Your smplkit
 API key is forwarded per request and never stored.

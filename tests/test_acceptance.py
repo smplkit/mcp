@@ -1,8 +1,8 @@
 """End-to-end acceptance: all eight tools against a real Jobs service.
 
-Provisions a throwaway verified account (ADR-028), drives the full tool surface
-including the ADR-057 magic moment (create recurring -> run_job returns a real
-200 with the captured body -> list_runs/get_run show it), and cleans up.
+Provisions a throwaway verified account, drives the full tool surface end-to-end
+(create recurring -> run_job returns a real 200 with the captured body ->
+list_runs/get_run show it), and cleans up.
 
 Runs only when a smplkit admin key is available (``ADMIN_API_KEY`` env or the
 ``[admin]`` profile in ``~/.smplkit``) — otherwise it skips. Opt in with
@@ -58,7 +58,7 @@ def test_eight_tools_and_magic_moment(account):
     assert created["schedule"] == "0 7 * * *"
     assert created["environments"]["production"]["enabled"] is True
 
-    # 2) run_job — the magic moment: a real MANUAL run with a captured 200 body.
+    # 2) run_job — a real MANUAL run with a captured 200 body.
     run = tools.run_job(client, job_id=job_id, environment="production",
                         wait=True, timeout_seconds=60)
     assert run["trigger"] == "MANUAL"
