@@ -133,5 +133,6 @@ jobs:
         run: |
           gh workflow run deploy.yml \
             --repo smplkit/mcp-private \
+            --ref main \
             --field sha="${{ github.sha }}" \
             --field app-version="${{ needs.release.outputs.app-version }}"
