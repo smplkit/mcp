@@ -33,6 +33,20 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
 
+# Semantic versioning of builds (ADR-057 builds were SHA-tagged; we now version
+# them). semantic-release derives the version from conventional commits; CI bakes
+# it into the image as APP_VERSION and tags the image with it.
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+commit_message = ""
+upload_to_repository = false
+major_on_zero = false
+allow_zero_version = true
+
+[tool.semantic_release.changelog]
+generate = false
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: read
+      contents: write
     concurrency:
       group: deploy-${{ github.repository_owner }}-${{ github.event.repository.name }}-production
       cancel-in-progress: false
@@ -74,11 +74,19 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+
+      - name: Resolve version
+        id: version
+        uses: smplkit/.github/actions/python-semantic-release@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -137,8 +145,9 @@ jobs:
         with:
           ecr-repository-url: ${{ steps.stack.outputs.ecr_repo }}
           build-args: |
-            APP_VERSION=${{ github.sha }}
+            APP_VERSION=${{ steps.version.outputs.app-version }}
           additional-tags: |
+            ${{ steps.version.outputs.app-version }}
             latest
 
       - name: Update Pulumi config
