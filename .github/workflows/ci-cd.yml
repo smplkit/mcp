@@ -1,0 +1,170 @@
+name: CI/CD
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-test.txt
+          pip install ruff
+
+      - name: Lint
+        run: ruff check src tests
+
+      - name: Test with coverage
+        run: pytest --cov=smplkit_mcp --cov-report=term-missing --cov-fail-under=90
+
+  acceptance:
+    needs: [ci]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-test.txt
+
+      - name: Acceptance tests (all eight tools vs live Jobs API)
+        # Provisions an ephemeral verified account via the admin API and drives
+        # every tool end-to-end (ADR-057 magic moment). Self-skips when
+        # ADMIN_API_KEY is not available to this repo.
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: pytest -m acceptance -v
+
+  deploy:
+    needs: [ci, acceptance]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: deploy-${{ github.repository_owner }}-${{ github.event.repository.name }}-production
+      cancel-in-progress: false
+    env:
+      AWS_REGION: us-east-1
+      PULUMI_STACK: smplkit/mcp/production
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # The Docker image has no smplkit-core dependency (ADR-057), so the image
+      # build needs no CodeArtifact. The *infra* program does: smplkit-infra is
+      # published to CodeArtifact, so authenticate pip before installing it.
+      - name: Authenticate pip with CodeArtifact (for smplkit-infra)
+        uses: smplkit/.github/actions/codeartifact-auth@main
+        with:
+          mode: login
+
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@v7
+
+      - name: Install Pulumi dependencies
+        run: pip install -r infra/requirements.txt
+
+      - name: Log in and select stack (create on first deploy)
+        working-directory: infra
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          pulumi login
+          pulumi stack select "${PULUMI_STACK}" --create
+
+      - name: Bootstrap base infrastructure on first deploy
+        working-directory: infra
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          # On the first ever deploy the ECR repository (and the rest of the
+          # base infra) does not exist yet, so there is no repositoryUrl to
+          # build against. Create it once here; on subsequent deploys the output
+          # already exists and this is a no-op.
+          if ! pulumi stack output repositoryUrl >/dev/null 2>&1; then
+            echo "First deploy: creating base infrastructure (ECR, ALB, CloudFront, DNS)..."
+            pulumi up --yes --skip-preview
+          fi
+
+      - name: Read infrastructure outputs
+        id: stack
+        working-directory: infra
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          pulumi stack output --json > stack.json
+          echo "ecr_repo=$(jq -r '.repositoryUrl' stack.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        id: docker-image
+        uses: smplkit/.github/actions/ecr-build-push@main
+        with:
+          ecr-repository-url: ${{ steps.stack.outputs.ecr_repo }}
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+          additional-tags: |
+            latest
+
+      - name: Update Pulumi config
+        working-directory: infra
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          pulumi config set mcp:imageTag "${{ github.sha }}" --stack "${PULUMI_STACK}"
+
+      - name: Refresh Pulumi state
+        working-directory: infra
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: pulumi refresh --yes --skip-preview
+
+      - name: Deploy infrastructure
+        working-directory: infra
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: pulumi up --yes --skip-preview
+
+      - name: Deploy summary
+        run: |
+          echo "## Deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Commit:** ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Image:** ${{ steps.docker-image.outputs.image-uri }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**URL:** https://mcp.smplkit.com" >> "$GITHUB_STEP_SUMMARY"
+          echo "**MCP endpoint:** https://mcp.smplkit.com/api/mcp" >> "$GITHUB_STEP_SUMMARY"

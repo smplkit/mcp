@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Testing
+.coverage
+.coverage.*
+coverage.xml
+.pytest_cache/
+htmlcov/
+
+# Ruff
+.ruff_cache/
+
+# Environment
+.env
+.env.local
+
+# Pulumi
+infra/venv/
