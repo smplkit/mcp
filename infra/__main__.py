@@ -80,6 +80,10 @@ stack = ProductServiceStack(
         "JOBS_BASE_DOMAIN": jobs_base_domain,
         **_oauth_env,
     },
+    # When OAuth is on, route /.well-known/oauth-protected-resource* to the
+    # server so it serves its own RFC 9728 PRM (ADR-058) — replaces the static
+    # S3 fallback. Requires smplkit-infra >= 1.9.0.
+    oauth_well_known_path=bool(oauth_authkit_domain),
     landing_page_html=_landing_html,
     # Hub references.
     vpc_id=platform.require_output("vpc_id"),
