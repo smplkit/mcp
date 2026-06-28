@@ -47,6 +47,23 @@ cloudfront_origin_secret = config.get_secret("cloudfrontOriginSecret")
 # The Jobs API host the server forwards customer requests to (ADR-057 §4).
 jobs_base_domain = config.get("jobsBaseDomain") or "jobs.smplkit.com"
 
+# WorkOS AuthKit — MCP one-tap OAuth (ADR-058). An empty AuthKit domain (the
+# default) keeps OAuth off and the server runs the API-key path unchanged. Set
+# `pulumi config set mcp:oauthAuthkitDomain <https://…authkit.app>` to turn on
+# the resource-server + token-exchange path.
+oauth_authkit_domain = (config.get("oauthAuthkitDomain") or "").rstrip("/")
+app_internal_url = config.get("appInternalUrl") or "http://app.internal.smplkit.local"
+_oauth_env = (
+    {
+        "MCP_OAUTH_AUTHORIZATION_SERVERS": oauth_authkit_domain,
+        "MCP_OAUTH_JWKS_URI": f"{oauth_authkit_domain}/oauth2/jwks",
+        "MCP_OAUTH_ISSUER": oauth_authkit_domain,
+        "MCP_OAUTH_APP_INTERNAL_URL": app_internal_url,
+    }
+    if oauth_authkit_domain
+    else {}
+)
+
 # ---------------------------------------------------------------------------
 # Product Service Stack (api only — stateless, no worker, no database)
 # ---------------------------------------------------------------------------
@@ -61,6 +78,7 @@ stack = ProductServiceStack(
     health_check_path="/health",
     environment_variables={
         "JOBS_BASE_DOMAIN": jobs_base_domain,
+        **_oauth_env,
     },
     landing_page_html=_landing_html,
     # Hub references.
