@@ -2,12 +2,12 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "com.smplkit/mcp",
   "title": "smplkit MCP Server",
-  "description": "Operate the whole smplkit platform from your AI agent — manage feature flags, config, runtime log levels, the audit log and SIEM forwarders, and scheduled HTTP jobs, all through one server.",
+  "description": "Operate smplkit from your agent: feature flags, config, logging, audit, and scheduled jobs.",
   "repository": {
     "url": "https://github.com/smplkit/mcp",
     "source": "github"
   },
-  "version": "0.2.0",
+  "version": "0.2.1",
   "remotes": [
     {
       "type": "streamable-http",
