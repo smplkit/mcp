@@ -74,43 +74,44 @@ Now the access token the MCP server validates **carries the smplkit account** �
 
 ---
 
-## Part B — The credential bridge (decision)
+## Part B — The credential bridge
 
-**The problem.** After the MCP server validates the WorkOS token (and reads `urn:smplkit:account_id`), it still has to call the **Jobs REST API**, which authenticates with smplkit API keys (`sk_api_*`). And the MCP spec **forbids token passthrough** (a token minted for the MCP resource must not be forwarded to a different-audience API — confused-deputy). So we can't just forward the WorkOS token to Jobs. Three options:
+**The problem.** After the MCP server validates the WorkOS token (aud = our MCP resource), it must call the product APIs (jobs, config, flags, logging, audit) on the user's behalf. Two hard constraints: (1) the MCP spec **forbids token passthrough** — the WorkOS token (aud = MCP resource) must not be forwarded to a different-audience API (confused-deputy); (2) we don't want to manufacture **persisted API keys** as plumbing — expired keys linger as customer-visible "junk" rows.
 
-### B1 — App-mediated exchange  ★ recommended (interim)
+**The enabling finding.** Every product service already accepts **ephemeral JWTs** via smplkit-core's `create_auth_dependency` (`python-core/src/smplcore/auth.py:446`): a **user JWT** (app-issued HS256, `iss=app_url`, `aud=smplkit-app`, carries `account_id`/`user_id`) and an **internal on-behalf-of JWT** (`mint_internal_jwt`, 60s, `originating_actor_type=USER`). Neither is persisted — they leave **zero database residue**. API keys are the *only* credential that creates a stored row. So the right bridge never mints a key.
 
-The MCP server, on a validated WorkOS token, calls a **new internal app endpoint** (e.g. `POST /api/v1/internal/mcp/credential`), relaying the user's WorkOS token. The app validates the WorkOS JWT (WorkOS JWKS), reads `urn:smplkit:account_id`, mints a **short-lived, account-scoped `sk_api_` key** (reusing the existing admin/service mint path; keys already support `expires_at`), and returns it. The MCP server forwards *that key* to Jobs and caches it in-process until it nears expiry.
+### The right design: token exchange → ephemeral app JWT  ★
 
-- **Pros:** Jobs and the **entire public API contract stay unchanged** (no `api-change-checklist`, no SDK regen — the new endpoint is internal-only, excluded from the published OpenAPI). The MCP server holds **no static platform credential** — it only ever relays the *user's own* token and receives a short-lived key. No token passthrough (the WorkOS token never reaches Jobs; Jobs gets a proper smplkit key). Account-in-token makes the lookup trivial.
-- **Cons:** one extra app hop per (cache-miss) request — mitigated by caching the short-lived key for its lifetime; and a new internal endpoint to build + secure (must be excluded from the customer spec and rate-limited).
+The **app** (the platform's existing credential authority — it already owns `issue_token`, `APP_AUTH_SECRET`, and `INTERNAL_JWT_SECRET`) performs an RFC 8693-style exchange; the MCP edge holds no platform secret.
 
-### B2 — Product APIs become OAuth resource servers  (north star, deferred)
+1. MCP server validates the inbound WorkOS token (resource-server hook, already built).
+2. MCP server calls a **VPC-only app endpoint** (e.g. `POST {app_internal_url}/internal/v1/mcp/token`) relaying the user's WorkOS token as the subject token.
+3. The app validates that WorkOS token (WorkOS JWKS), confirms its audience is our MCP resource, resolves the smplkit user/account (from the WorkOS `external_id` we set in Part A, or the `urn:smplkit:account_id` claim), and mints a **short-lived user JWT** via the existing `issue_token` (short TTL, e.g. 5 min) — **no API key**.
+4. MCP server forwards that ephemeral JWT to the product APIs, which already accept it, and caches it in-process for its brief TTL (one exchange serves all product calls until it expires).
 
-Jobs (and every product API) validate WorkOS JWTs directly and resolve the account from a claim; the MCP server performs an RFC 8693 **token exchange** (MCP-audience → Jobs-audience) per downstream call.
+**Properties:**
+- **No API keys, no junk** — the forwarded credential is a stateless JWT; nothing is persisted or shown in the customer's key list. (No "auto-delete keys" feature needed.)
+- **No token passthrough** — the WorkOS token is the *subject* of an exchange, consumed only by the MCP server (correct audience) and the app (the exchange authority); products receive a *different*, platform-issued token. Spec-compliant.
+- **MCP edge holds no static platform secret** — it relays the user's own WorkOS token and receives a short-lived token; the app stays the sole authority. (Preserves the ADR-057 §2.4 posture — unlike giving the edge `INTERNAL_JWT_SECRET` or an admin key.)
+- **No public API change, no SDK regen** — the exchange endpoint is an internal VPC-only route (same pattern as the existing `/internal/v1/accounts` key-introspection endpoint), not a customer resource.
+- **Reuses what exists** — `issue_token` on the app side; "products accept user JWTs" on the receiving side. One small new internal endpoint.
 
-- **Pros:** spec-pure, no API keys in the loop, uniform auth across the platform.
-- **Cons:** **a public API contract change on every product service** (new auth requirement) → full `api-change-checklist` + regen across **6 SDKs** + showcase impact; depends on token-exchange support (WorkOS OBO is unconfirmed) or our own exchange service. Largest blast radius. **Right long-term, wrong first step.**
+**Variant considered — app mints a per-call internal JWT** (`mint_internal_jwt`, `originating_actor=USER`, 60s, aud-scoped per service): gives richer audit provenance ("user X via MCP") and per-service audience scoping, but requires one mint per target service (chattier) and the user-JWT path already records `actor_type=USER` correctly. Keep the user-JWT exchange as the default; the internal-JWT variant is a clean future refinement if we want "via MCP" provenance in audit.
 
-### B3 — Static service credential in the MCP server  (rejected)
+### Rejected alternatives
 
-The MCP server holds a long-lived `sk_admin_`-class credential and mints account-scoped keys itself.
-
-- **Why not:** smallest code, but it puts a platform-wide credential inside the stateless edge server — a compromise of the MCP server becomes admin access. This is exactly the posture ADR-057 §2.4 avoided ("no platform credential"). Don't.
-
-### Recommendation
-
-**Ship B1 now; document B2 as the migration target.** B1 keeps the public contract and the 6 SDKs untouched, keeps the MCP server credential-light, and is fully enabled by the account-in-token from Part A. Revisit B2 once the OAuth path is proven and there's a concrete reason to make the product APIs natively OAuth (e.g. non-MCP first-party clients).
+- **Mint short-lived API keys** (the original B1) — creates the customer-visible "expired junk" rows; rejected on your call. The platform doesn't need it.
+- **MCP server mints internal JWTs itself** — would require shipping `INTERNAL_JWT_SECRET` to the edge; a single powerful secret at the edge can impersonate any user to any service. Same smell as a static admin key. Keep minting at the app.
+- **Products become WorkOS resource servers** (validate WorkOS JWTs directly) — a public API contract change across all services + 6 SDK regens, for no benefit the ephemeral-JWT exchange doesn't already deliver. Only revisit if non-MCP external clients ever need it.
 
 ---
 
 ## Decisions I need from you
 
-1. **Approve Part A** (the Standalone handler in `smplkit/app`, using `httpx`, adding `WORKOS_API_KEY`, plus the JWT Template). — yes/adjust
-2. **Pick the bridge:** **B1 (recommended)** / B2 / B3.
-   - If **B1**: I confirm the internal endpoint is excluded from the published OpenAPI (no SDK regen). No public API change.
-   - If **B2**: I stop and bring you a full API-change proposal (per the org rule) before touching any service or spec.
-3. **Build order:** once approved, I'd implement in `smplkit/app` (separate session/checkout) in this order: (a) the External Sign-in handler + `complete()` call, (b) the JWT Template (you paste it in the dashboard), (c) the B1 internal credential endpoint, (d) wire the MCP server's exchange client + flip the staging flag on, (e) end-to-end test from a real MCP client. Then production cutover (WorkOS Prod env + card).
+1. **Approve Part A** (Standalone handler in `smplkit/app`: `httpx`, `WORKOS_API_KEY`, the JWT Template). — yes/adjust
+2. **Approve the Part B design** (token exchange → ephemeral short-lived **user JWT** via a VPC-only app endpoint; no API keys; no public API change). — yes/adjust
+   - One sub-choice you may have a view on: the exchanged token as a **short-TTL user JWT** (simplest, one token for all products — my recommendation) vs a **per-call internal on-behalf-of JWT** (richer audit provenance). I'll default to the user JWT unless you want the provenance.
+3. **Build order** (in `smplkit/app`, a separate checkout/session): (a) External Sign-in handler + `complete()` call; (b) the JWT Template (you paste it in the dashboard); (c) the internal token-exchange endpoint; (d) wire the MCP server's exchange client + flip the staging flag on; (e) end-to-end test from a real MCP client. Then production cutover (WorkOS Prod env + card).
 
 ## References
 - ADR-058 (§2.1 resource server; §2.3 WorkOS decision; §2.4 — this elaborates it)
