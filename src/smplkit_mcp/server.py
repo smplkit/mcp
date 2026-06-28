@@ -20,7 +20,7 @@ from fastmcp.server.dependencies import get_http_headers
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse
 
-from . import tools
+from . import oauth, tools
 from .config import load_settings
 from .errors import JobsApiError, MissingApiKeyError, friendly_message
 from .jobs_client import JobsClient
@@ -28,6 +28,12 @@ from .urls import NonPublicTargetError
 
 APP_VERSION = os.environ.get("APP_VERSION", "dev")
 SETTINGS = load_settings()
+
+# OAuth resource-server provider (ADR-058). None unless an authorization server is
+# configured via MCP_OAUTH_* env, in which case FastMCP serves Protected Resource
+# Metadata, the 401/WWW-Authenticate challenge, and token validation. Disabled by
+# default, so the live server keeps the API-key pass-through unchanged.
+AUTH_PROVIDER = oauth.build_auth_provider(oauth.SETTINGS)
 
 INSTRUCTIONS = (
     "The agent gateway to the smplkit platform — it exposes smplkit's capabilities "
@@ -47,6 +53,9 @@ mcp: FastMCP = FastMCP(
     # Mask unexpected internal exceptions; user-facing detail is raised as a
     # ToolError (which bypasses masking). Keeps internals — and the key — unleaked.
     mask_error_details=True,
+    # None in the default (API-key-only) deployment; an OAuth resource-server
+    # provider when MCP_OAUTH_* is configured (ADR-058).
+    auth=AUTH_PROVIDER,
 )
 
 
@@ -77,10 +86,16 @@ def _client() -> JobsClient:
     # get_http_headers() by default.
     headers = get_http_headers(include_all=True)
     try:
-        api_key = extract_api_key(headers)
+        token = extract_api_key(headers)
     except MissingApiKeyError as exc:
         raise ToolError(str(exc)) from exc
-    return JobsClient(api_key, SETTINGS.jobs_base_url)
+    # In OAuth mode the request has already been authenticated (a valid JWT or a
+    # smplkit API key). An API key forwards downstream as today; a validated
+    # OAuth token cannot yet be exchanged for a product-API credential, so refuse
+    # rather than mis-forward a token the product API would reject (ADR-058).
+    if oauth.SETTINGS.enabled and not oauth.looks_like_api_key(token):
+        raise ToolError(oauth.OAUTH_EXCHANGE_PENDING_MESSAGE)
+    return JobsClient(token, SETTINGS.jobs_base_url)
 
 
 def _call(fn: Callable[..., Any], **kwargs: Any) -> Any:
