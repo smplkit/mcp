@@ -3,12 +3,11 @@
 The MCP authorization spec models the MCP server as an OAuth 2.1 **resource
 server**: it validates access tokens minted by a separate **authorization
 server** and advertises where those tokens come from via Protected Resource
-Metadata (RFC 9728). This module wires that resource-server role onto the
-FastMCP app — *without* committing to which authorization server mints the
-tokens. That build-vs-buy choice (front the app with WorkOS/Auth0/Stytch, or
-turn the app into an OAuth AS behind FastMCP's ``OAuthProxy``) is still pending
-Mike's sign-off (ADR-058); the resource-server half below is identical for every
-one of those options, so it can ship now.
+Metadata (RFC 9728). The authorization server is **WorkOS AuthKit**, fronting our
+existing SSO in Standalone mode (ADR-058 §2.3). This module validates AuthKit's
+tokens and, when a validated OAuth token arrives, exchanges it for a short-lived
+app session JWT via the app's VPC-only endpoint (``exchange_for_app_token``) —
+the credential the product APIs already accept. No API key is ever minted.
 
 **Disabled by default.** With no authorization server configured,
 :func:`build_auth_provider` returns ``None`` and the server behaves exactly as it
@@ -38,18 +37,22 @@ has never validated API keys itself — the product API is the authority
 (ADR-057 §2.4) — so the pass-through accepts a well-formed key and lets the tool
 forward it downstream exactly as today.
 
-**Not yet wired: the token→credential exchange.** Once a real OAuth access token
-is validated, the server still has to obtain a credential it can forward to the
-product APIs. That bridge depends on the authorization-server decision (e.g. the
-AS mints/maps an smplkit API credential during the in-flow sign-in) and is
-therefore deferred. Until it exists, a validated OAuth token reaching the tool
-layer raises :data:`OAUTH_EXCHANGE_PENDING_MESSAGE` rather than silently
-forwarding a token the product API would reject.
+**The token→credential bridge.** When a validated OAuth (WorkOS) token reaches
+the tool layer, :func:`exchange_for_app_token` swaps it — via the app's VPC-only
+``/internal/v1/mcp/token`` endpoint (``MCP_OAUTH_APP_INTERNAL_URL``) — for a
+short-lived app session JWT, cached in-process until it nears expiry. That JWT is
+what gets forwarded to the product APIs; the WorkOS token never leaves this
+boundary (no token passthrough) and no API key is created.
 """
 from __future__ import annotations
 
+import hashlib
 import os
+import threading
+import time
 from dataclasses import dataclass
+
+import httpx
 
 # Base auth classes are lightweight. The JWT verifier pulls heavy crypto deps
 # (authlib/joserfc/cryptography), so it is imported lazily in
@@ -70,11 +73,11 @@ DEFAULT_MCP_PATH = "/api/mcp"
 DEFAULT_API_KEY_PREFIXES = ("sk_",)
 RESOURCE_NAME = "smplkit MCP Server"
 
-OAUTH_EXCHANGE_PENDING_MESSAGE = (
-    "This OAuth access token was validated, but exchanging it for a product-API "
-    "credential is not implemented yet (pending the ADR-058 authorization-server "
-    "decision). For now, connect with a smplkit API key instead."
-)
+# In-flow credential exchange: the MCP server forwards a validated WorkOS token
+# to the app's VPC-only exchange endpoint and receives a short-lived app session
+# JWT to forward to the product APIs — no API key is minted (ADR-058 §2.4).
+_EXCHANGE_PATH = "/internal/v1/mcp/token"
+_EXCHANGE_BUFFER_SECONDS = 30
 
 
 def _csv(value: str | None) -> tuple[str, ...]:
@@ -98,6 +101,8 @@ class OAuthSettings:
     algorithm: str | None = None
     scopes_supported: tuple[str, ...] = ()
     api_key_prefixes: tuple[str, ...] = DEFAULT_API_KEY_PREFIXES
+    # VPC-only base URL of the app's token-exchange endpoint (ADR-058 §2.4).
+    app_internal_url: str = ""
 
     @property
     def enabled(self) -> bool:
@@ -135,6 +140,7 @@ def load_oauth_settings(env: dict[str, str] | None = None) -> OAuthSettings:
         algorithm=env.get("MCP_OAUTH_ALGORITHM") or None,
         scopes_supported=_csv(env.get("MCP_OAUTH_SCOPES_SUPPORTED")),
         api_key_prefixes=_csv(env.get("MCP_OAUTH_API_KEY_PREFIXES")) or DEFAULT_API_KEY_PREFIXES,
+        app_internal_url=env.get("MCP_OAUTH_APP_INTERNAL_URL") or "",
     )
 
 
@@ -215,3 +221,70 @@ def build_auth_provider(settings: OAuthSettings | None = None) -> AuthProvider |
         verifiers=[ApiKeyPassthroughVerifier(settings.api_key_prefixes)],
         base_url=settings.resource_base_url,
     )
+
+
+# --------------------------------------------------------------------------
+# Token→credential bridge (ADR-058 §2.4)
+# --------------------------------------------------------------------------
+
+
+class TokenExchangeError(Exception):
+    """Raised when exchanging a WorkOS token for an app session JWT fails."""
+
+
+# Cache of exchanged app JWTs, keyed by a hash of the WorkOS token, so repeated
+# tool calls in one session don't re-hit the app. Bounded by dropping expired
+# entries on each miss. Guarded by a lock (tools may run across threads).
+_exchange_cache: dict[str, tuple[str, float]] = {}
+_exchange_lock = threading.Lock()
+
+
+def exchange_for_app_token(workos_token: str, settings: OAuthSettings | None = None) -> str:
+    """Exchange a validated WorkOS access token for a short-lived app session JWT.
+
+    Calls the app's VPC-only ``/internal/v1/mcp/token`` endpoint and caches the
+    returned JWT in-process until shortly before it expires. The WorkOS token is
+    never forwarded downstream (no token passthrough) and no API key is minted.
+
+    Raises :class:`TokenExchangeError` if OAuth is misconfigured, the app is
+    unreachable, or the token is rejected.
+    """
+    settings = settings or SETTINGS
+    if not settings.app_internal_url:
+        raise TokenExchangeError(
+            "OAuth is enabled but MCP_OAUTH_APP_INTERNAL_URL is not configured."
+        )
+
+    key = hashlib.sha256(workos_token.encode()).hexdigest()
+    now = time.time()
+    with _exchange_lock:
+        cached = _exchange_cache.get(key)
+        if cached is not None and cached[1] - _EXCHANGE_BUFFER_SECONDS > now:
+            return cached[0]
+
+    url = f"{settings.app_internal_url.rstrip('/')}{_EXCHANGE_PATH}"
+    try:
+        response = httpx.post(url, json={"workos_access_token": workos_token}, timeout=10.0)
+    except httpx.HTTPError as exc:
+        raise TokenExchangeError(
+            "Could not reach the smplkit sign-in service. Please try again."
+        ) from exc
+
+    if response.status_code in (401, 403):
+        raise TokenExchangeError(
+            "Your smplkit sign-in could not be verified. Reconnect to sign in again."
+        )
+    if response.status_code >= 400:
+        raise TokenExchangeError("The smplkit sign-in service rejected the request.")
+
+    data = response.json()
+    app_token = data.get("access_token")
+    if not app_token:
+        raise TokenExchangeError("The smplkit sign-in service returned no token.")
+    expires_in = data.get("expires_in") or 300
+
+    with _exchange_lock:
+        for stale in [k for k, (_, exp) in _exchange_cache.items() if exp <= now]:
+            _exchange_cache.pop(stale, None)
+        _exchange_cache[key] = (app_token, now + float(expires_in))
+    return app_token

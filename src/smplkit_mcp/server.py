@@ -89,12 +89,15 @@ def _client() -> JobsClient:
         token = extract_api_key(headers)
     except MissingApiKeyError as exc:
         raise ToolError(str(exc)) from exc
-    # In OAuth mode the request has already been authenticated (a valid JWT or a
+    # In OAuth mode the request is already authenticated (a valid WorkOS JWT or a
     # smplkit API key). An API key forwards downstream as today; a validated
-    # OAuth token cannot yet be exchanged for a product-API credential, so refuse
-    # rather than mis-forward a token the product API would reject (ADR-058).
+    # OAuth token is exchanged for a short-lived app session JWT — the credential
+    # the product APIs accept — which is what we forward (ADR-058 §2.4).
     if oauth.SETTINGS.enabled and not oauth.looks_like_api_key(token):
-        raise ToolError(oauth.OAUTH_EXCHANGE_PENDING_MESSAGE)
+        try:
+            token = oauth.exchange_for_app_token(token)
+        except oauth.TokenExchangeError as exc:
+            raise ToolError(str(exc)) from exc
     return JobsClient(token, SETTINGS.jobs_base_url)
 
 

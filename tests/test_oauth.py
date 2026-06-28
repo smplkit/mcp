@@ -276,12 +276,33 @@ class TestServerWiring:
         # The live server ships API-key-only; OAuth is opt-in via env.
         assert server.AUTH_PROVIDER is None
 
-    def test_client_guard_refuses_oauth_token_when_enabled(self, monkeypatch):
-        monkeypatch.setattr(oauth, "SETTINGS", _enabled_settings())
+    def test_client_exchanges_oauth_token_when_enabled(self, monkeypatch):
+        monkeypatch.setattr(
+            oauth, "SETTINGS", _enabled_settings(app_internal_url="http://app.internal")
+        )
+        monkeypatch.setattr(
+            oauth, "exchange_for_app_token", lambda token, settings=None: "app-jwt-xyz"
+        )
         monkeypatch.setattr(
             server, "get_http_headers", lambda **kw: {"authorization": "Bearer eyJ.a.b"}
         )
-        with pytest.raises(ToolError, match="not implemented yet"):
+        # The OAuth token is swapped for the app session JWT, which is forwarded.
+        client = server._client()
+        assert client._api_key == "app-jwt-xyz"
+
+    def test_client_surfaces_exchange_failure(self, monkeypatch):
+        monkeypatch.setattr(
+            oauth, "SETTINGS", _enabled_settings(app_internal_url="http://app.internal")
+        )
+
+        def _boom(token, settings=None):
+            raise oauth.TokenExchangeError("exchange unavailable")
+
+        monkeypatch.setattr(oauth, "exchange_for_app_token", _boom)
+        monkeypatch.setattr(
+            server, "get_http_headers", lambda **kw: {"authorization": "Bearer eyJ.a.b"}
+        )
+        with pytest.raises(ToolError, match="exchange unavailable"):
             server._client()
 
     def test_client_forwards_api_key_when_enabled(self, monkeypatch):
@@ -300,3 +321,85 @@ class TestServerWiring:
         # No OAuth gate when disabled: any bearer is forwarded as today.
         client = server._client()
         assert client._api_key == "eyJ.a.b"
+
+
+class TestExchangeForAppToken:
+    def setup_method(self):
+        oauth._exchange_cache.clear()
+
+    def test_unconfigured_app_url_raises(self):
+        with pytest.raises(oauth.TokenExchangeError, match="APP_INTERNAL_URL"):
+            oauth.exchange_for_app_token("wtok", _enabled_settings(app_internal_url=""))
+
+    def test_success_and_caches(self, monkeypatch):
+        calls = []
+
+        class _Resp:
+            status_code = 200
+
+            def json(self):
+                return {"access_token": "app-jwt", "expires_in": 300}
+
+        def _post(url, json=None, timeout=None):
+            calls.append(url)
+            return _Resp()
+
+        monkeypatch.setattr(oauth.httpx, "post", _post)
+        s = _enabled_settings(app_internal_url="http://app.internal/")
+        first = oauth.exchange_for_app_token("wtok", s)
+        second = oauth.exchange_for_app_token("wtok", s)  # served from cache
+        assert first == second == "app-jwt"
+        assert calls == ["http://app.internal/internal/v1/mcp/token"]  # one POST only
+
+    def test_rejected_token_maps_to_reconnect(self, monkeypatch):
+        class _Resp:
+            status_code = 403
+
+            def json(self):
+                return {}
+
+        monkeypatch.setattr(oauth.httpx, "post", lambda *a, **k: _Resp())
+        with pytest.raises(oauth.TokenExchangeError, match="verified"):
+            oauth.exchange_for_app_token("wtok", _enabled_settings(app_internal_url="http://a"))
+
+    def test_server_error_maps_to_rejected(self, monkeypatch):
+        class _Resp:
+            status_code = 500
+
+            def json(self):
+                return {}
+
+        monkeypatch.setattr(oauth.httpx, "post", lambda *a, **k: _Resp())
+        with pytest.raises(oauth.TokenExchangeError, match="rejected"):
+            oauth.exchange_for_app_token("wtok", _enabled_settings(app_internal_url="http://a"))
+
+    def test_network_error_maps_to_retry(self, monkeypatch):
+        def _post(*a, **k):
+            raise oauth.httpx.ConnectError("down")
+
+        monkeypatch.setattr(oauth.httpx, "post", _post)
+        with pytest.raises(oauth.TokenExchangeError, match="reach"):
+            oauth.exchange_for_app_token("wtok", _enabled_settings(app_internal_url="http://a"))
+
+    def test_no_token_in_response(self, monkeypatch):
+        class _Resp:
+            status_code = 200
+
+            def json(self):
+                return {"expires_in": 300}
+
+        monkeypatch.setattr(oauth.httpx, "post", lambda *a, **k: _Resp())
+        with pytest.raises(oauth.TokenExchangeError, match="no token"):
+            oauth.exchange_for_app_token("wtok", _enabled_settings(app_internal_url="http://a"))
+
+    def test_prunes_expired_entries_on_miss(self, monkeypatch):
+        class _Resp:
+            status_code = 200
+
+            def json(self):
+                return {"access_token": "fresh", "expires_in": 300}
+
+        monkeypatch.setattr(oauth.httpx, "post", lambda *a, **k: _Resp())
+        oauth._exchange_cache["stale-key"] = ("old", 0.0)  # expired at epoch
+        oauth.exchange_for_app_token("wtok", _enabled_settings(app_internal_url="http://a"))
+        assert "stale-key" not in oauth._exchange_cache  # pruned on the miss
