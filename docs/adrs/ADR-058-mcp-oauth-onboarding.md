@@ -2,7 +2,7 @@
 
 | Field      | Value                                                                                          |
 |------------|------------------------------------------------------------------------------------------------|
-| Status     | **Proposed** — resource-server scaffolding implemented; **authorization-server build-vs-buy decision pending Mike** |
+| Status     | **Proposed** — resource-server scaffolding implemented; **§2.3 authz-server decided 2026-06-28: WorkOS AuthKit**; credential bridge (§2.4) + wiring pending |
 | Date       | 2026-06-28                                                                                      |
 | Author     | Mike (draft prepared by Claude Code)                                                            |
 | Applies To | smplkit/mcp (resource server, this repo); smplkit/app (authorization server + credential bridge) |
@@ -84,6 +84,8 @@ There are three shapes, not two. FastMCP's `OAuthProxy`/`OIDCProxy` adds a genui
 - **Trade-off to weigh:** a third-party vendor sits in the critical auth path, and there is lock-in (mitigated by standard JWTs, the no-migration standalone mode, and the resource-server code being portable). Stytch is the viable runner-up (same fronting model, but a 10k-MAU free tier, unpublished overage pricing, and fresh Twilio ownership). Auth0 and Cognito are not recommended on cost/operational grounds above.
 
 **Why this still needs your sign-off even at $0:** WorkOS becomes a dependency in the login path (availability, data residency, lock-in) and carries a real price above 1M MAU. Per our "stop before adopting any vendor / anything with cost" rule, I am **proposing, not adopting**.
+
+> **Decision — 2026-06-28: accepted, WorkOS AuthKit (Standalone Connect).** Next actions: (1) Mike provisions a WorkOS account and configures the dashboard — Standalone Connect pointed at our existing SSO, enable CIMD + DCR, set the MCP server's resource URL as a Resource Indicator (this is the external dependency only Mike can do). (2) Wire the resource server: set `MCP_OAUTH_AUTHORIZATION_SERVERS`/`MCP_OAUTH_JWKS_URI` at the AuthKit issuer (the `oauth.py` scaffolding already accepts these; FastMCP's `AuthKitProvider` is an optional convenience). (3) Design the §2.4 credential bridge.
 
 ### 2.4 The credential bridge — new architecture, coupled to §2.3
 
