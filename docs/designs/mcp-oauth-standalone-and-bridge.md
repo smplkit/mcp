@@ -106,12 +106,37 @@ The **app** (the platform's existing credential authority — it already owns `i
 
 ---
 
-## Decisions I need from you
+## Decisions (approved 2026-06-28)
 
-1. **Approve Part A** (Standalone handler in `smplkit/app`: `httpx`, `WORKOS_API_KEY`, the JWT Template). — yes/adjust
-2. **Approve the Part B design** (token exchange → ephemeral short-lived **user JWT** via a VPC-only app endpoint; no API keys; no public API change). — yes/adjust
-   - One sub-choice you may have a view on: the exchanged token as a **short-TTL user JWT** (simplest, one token for all products — my recommendation) vs a **per-call internal on-behalf-of JWT** (richer audit provenance). I'll default to the user JWT unless you want the provenance.
-3. **Build order** (in `smplkit/app`, a separate checkout/session): (a) External Sign-in handler + `complete()` call; (b) the JWT Template (you paste it in the dashboard); (c) the internal token-exchange endpoint; (d) wire the MCP server's exchange client + flip the staging flag on; (e) end-to-end test from a real MCP client. Then production cutover (WorkOS Prod env + card).
+- **Part A** — Standalone handler in `smplkit/app` (`httpx`, `WORKOS_API_KEY`, JWT Template): **approved**.
+- **Part B** — token exchange → ephemeral **short-TTL user JWT** via a VPC-only app endpoint; no API keys; no public API change: **approved** (user-JWT variant chosen over the per-call internal-JWT provenance variant).
+
+## Implementation contract (turnkey for the app-side session)
+
+**New, internal/VPC-only app endpoint** (excluded from the customer OpenAPI — model it on the existing `/internal/v1/accounts` route):
+```
+POST {app_internal_url}/internal/v1/mcp/token
+Body:    { "workos_access_token": "<the user's WorkOS JWT>" }
+Action:  validate the WorkOS JWT (WorkOS JWKS for the env) → assert aud == our MCP resource
+         → resolve smplkit user/account (WorkOS external_id we set in Part A, or the
+           urn:smplkit:account_id claim) → issue_token(..., ttl_seconds≈300)
+Returns: { "access_token": "<app user JWT>", "expires_in": 300 }
+```
+
+**App-side tasks (`smplkit/app`):**
+1. `routes/mcp_auth.py` — `GET /api/v1/auth/mcp/external-signin?external_auth_id=…`: stash `external_auth_id`+nonce in session, start existing OIDC (`begin_oidc_login`, `entry_point="mcp_workos"`).
+2. Completion branch in `handle_oidc_callback`: when `entry_point=="mcp_workos"`, `POST https://api.workos.com/authkit/oauth2/complete` (Bearer `WORKOS_API_KEY`) with `{external_auth_id, user:{id:user.id, email, first_name, last_name, metadata:{smplkit_account_id, smplkit_user_id}}}` → redirect to returned `redirect_uri`.
+3. The `/internal/v1/mcp/token` exchange endpoint (above).
+4. `core/config.py`: add `workos_api_key`, `workos_client_id` (Secrets Manager); keep the WorkOS call on `httpx` (no new dep).
+5. Tests (≥90% coverage), and confirm both new routes are excluded from the published OpenAPI (no SDK regen).
+
+**Dashboard task (Mike):** add the JWT Template (`urn:smplkit:account_id ← {{user.metadata.smplkit_account_id}}`, `urn:smplkit:user_id ← {{user.metadata.smplkit_user_id}}`); set the External Sign-in URI to the route from task 1.
+
+**MCP-side tasks (`smplkit/mcp`, this repo):** replace `OAUTH_EXCHANGE_PENDING_MESSAGE` in `_client()` with: on a validated OAuth token, call the exchange endpoint, cache the returned user JWT in-process by token id until ~TTL, and build the product client with that JWT. Add `APP_INTERNAL_URL` config. Then flip the staging `MCP_OAUTH_*` flag on and run an end-to-end test from a real MCP client.
+
+**Then:** production cutover (WorkOS Production env + billing card; replicate the staging config).
+
+**Pre-merge:** adversarial security review of the new auth code (confused-deputy, audience checks, WorkOS-JWT validation, replay, the VPC-only endpoint's threat model, edge-held short-TTL JWT exposure).
 
 ## References
 - ADR-058 (§2.1 resource server; §2.3 WorkOS decision; §2.4 — this elaborates it)

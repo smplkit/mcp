@@ -2,7 +2,7 @@
 
 | Field      | Value                                                                                          |
 |------------|------------------------------------------------------------------------------------------------|
-| Status     | **Proposed** — resource-server scaffolding implemented; **§2.3 authz-server decided 2026-06-28: WorkOS AuthKit**; credential bridge (§2.4) + wiring pending |
+| Status     | **Proposed** — resource-server scaffolding implemented; **§2.3 WorkOS AuthKit + §2.4 token-exchange bridge decided 2026-06-28**; app-side implementation pending |
 | Date       | 2026-06-28                                                                                      |
 | Author     | Mike (draft prepared by Claude Code)                                                            |
 | Applies To | smplkit/mcp (resource server, this repo); smplkit/app (authorization server + credential bridge) |
@@ -96,6 +96,8 @@ After the resource server validates the AS token, it must still obtain a credent
 - **(c) Exchange at sign-in.** The in-flow callback resolves the account and mints an API credential bound to it, handing the client a credential the existing path already accepts. Most compatible with today's design.
 
 This pass deliberately does **not** build the bridge: a validated OAuth token reaching the tool layer raises a clear "exchange not yet implemented" error rather than silently forwarding a token Jobs would reject. Choosing among (a)/(b)/(c) is the first follow-up after §2.3, and (b) in particular would need its own API-change review.
+
+> **Decision — 2026-06-28 (approved):** **token exchange → ephemeral short-TTL user JWT** — a refinement of (a)/(c) that mints **no API key**. Investigation showed every product service already accepts the app's ephemeral user JWT and 60s internal "on-behalf-of" JWTs (smplkit-core `create_auth_dependency`); API keys are the only *persisted* credential. So the MCP server validates the WorkOS token and calls a **VPC-only app endpoint** that exchanges it for a short-TTL app-issued **user JWT** (existing `issue_token`), which it forwards to the product APIs. No keys minted (no "expired junk" rows), no token passthrough, no public API change, and the edge holds no static platform secret (the app stays the sole authority). Option (b) (products as native OAuth resource servers) remains the far-future north star only. Full design + implementation contract: [`docs/designs/mcp-oauth-standalone-and-bridge.md`](../designs/mcp-oauth-standalone-and-bridge.md).
 
 ## 3. Consequences
 
