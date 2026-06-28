@@ -31,3 +31,6 @@ htmlcov/
 
 # Pulumi
 infra/venv/
+
+# Node (examples)
+node_modules/

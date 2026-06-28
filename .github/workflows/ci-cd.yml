@@ -60,6 +60,39 @@ jobs:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
         run: pytest -m acceptance -v
 
+  # Make sure the reference examples in examples/ still compile/typecheck. Needs
+  # no secrets, so it's safe in this public repo. Independent of the service
+  # checks: a broken example turns the run red (so we notice) but does not gate
+  # the release/deploy of the server itself.
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "lts/*"
+
+      - name: Typecheck daily-digest (TypeScript)
+        working-directory: examples/daily-digest
+        run: |
+          npm ci
+          npm run typecheck
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Compile-check nightly-cleanup (Python)
+        working-directory: examples/nightly-cleanup
+        run: |
+          pip install -r requirements.txt
+          python -m py_compile app.py
+          python -c "import app"
+
   # Version resolution + git tag + GitHub release stay in this (public) repo:
   # they are about this repo's own release identity and use the built-in
   # GITHUB_TOKEN, which can write here but nowhere else. semantic-release is run
