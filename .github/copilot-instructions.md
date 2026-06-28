@@ -21,7 +21,7 @@ Rely on each tool's own parameter schema.
 
 ## Per-capability notes
 
-- Flags: `set_flag` changes the per-environment value, the `enabled` kill switch (false serves the flag's global default), and ordered targeting `rules` (each `{"when": [{"attribute","operator","value"}], "serve": <value>}`; operators `== != > < >= <= in contains`; pass `[]` to clear rules).
+- Flags: `set_flag` changes the per-environment value, the `enabled` kill switch (false serves the flag's global default), and ordered targeting `rules` (each `{"when": [{"attribute","operator","value"}], "serve": <value>}`; operators `== != > < >= <= in contains`). Passing `rules` replaces that environment's entire rule set — to add one without dropping the others, `get_flag` first and pass the full list including the existing rules; pass `[]` to clear them all.
 - Config: `set_config_value` sets one key in one environment; an undeclared key is auto-declared with a type inferred from the value. Use `parent` to inherit keys from another config.
 - Logging: raise a logger to `DEBUG` to investigate, then `reset_logger` to revert — don't leave prod noisy. Levels: TRACE/DEBUG/INFO/WARN/ERROR/FATAL/SILENT.
 - Audit: `query_events` filters by actor, resource type/id, event type, category, severity, and time window. Always `test_forwarder` a destination (it dry-runs and returns status/latency/body) before `create_forwarder` saves it.

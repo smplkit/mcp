@@ -29,7 +29,7 @@ The tools describe their own parameters; rely on those schemas. Everything below
 `set_flag` changes three things in one environment:
 - **value** — what the flag serves when no rule matches (the per-environment default).
 - **enabled** — the kill switch. `false` skips all targeting and serves the flag's global default; `true` re-enables it.
-- **rules** — ordered targeting. Each rule is `{"when": [{"attribute","operator","value"}, …], "serve": <value>}`; multiple conditions are AND-ed, first matching rule wins. Operators: `==`, `!=`, `>`, `<`, `>=`, `<=`, `in`, `contains`. Pass `[]` to clear rules. Rules evaluate against the context your SDK supplies at lookup time (e.g. `user.plan`, `account.region`).
+- **rules** — ordered targeting. Each rule is `{"when": [{"attribute","operator","value"}, …], "serve": <value>}`; multiple conditions are AND-ed, first matching rule wins. Operators: `==`, `!=`, `>`, `<`, `>=`, `<=`, `in`, `contains`. **Passing `rules` replaces that environment's entire rule set** — to add one rule without dropping the others, `get_flag` first and pass the full list including the existing ones; pass `[]` to clear them all. Rules evaluate against the context your SDK supplies at lookup time (e.g. `user.plan`, `account.region`).
 
 ## Config: keys and per-environment values
 

@@ -21,7 +21,7 @@ smplkit is a hosted developer platform — feature flags, config, logging, audit
 - **Infer low-level shapes; don't ask.** Flag type from the default's nature; job kind from the schedule (cron → recurring, `run_at` → one-off, neither → manual). Translate natural language to the right cron expression, in the user's timezone.
 
 ## Per-capability notes
-- **Flags:** `set_flag` changes the per-env value, the `enabled` kill switch (false serves the global default), and ordered `rules` (`{"when":[{"attribute","operator","value"}],"serve":…}`; operators `== != > < >= <= in contains`; `[]` clears).
+- **Flags:** `set_flag` changes the per-env value, the `enabled` kill switch (false serves the global default), and ordered `rules` (`{"when":[{"attribute","operator","value"}],"serve":…}`; operators `== != > < >= <= in contains`). **Passing `rules` replaces that environment's entire rule set** — to add one without dropping the others, `get_flag` first and pass the full list including the existing ones; `[]` clears them all.
 - **Config:** `set_config_value` sets one key in one environment; an undeclared key is auto-declared with an inferred type. Use `parent` to inherit keys.
 - **Logging:** raise a logger to `DEBUG` to investigate, then `reset_logger` to revert. Levels: TRACE/DEBUG/INFO/WARN/ERROR/FATAL/SILENT.
 - **Audit:** `query_events` filters by actor/resource/event type/category/severity/time. Always `test_forwarder` a destination (it dry-runs and returns status/latency/body) before `create_forwarder` saves it.

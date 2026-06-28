@@ -229,7 +229,9 @@ def create_job(
             immediately). Mutually exclusive with `schedule`.
         timezone: IANA timezone the cron `schedule` runs in (e.g.
             'America/New_York'). Recurring jobs only; defaults to UTC.
-        retry_policy: The id of a named retry policy to apply to failed runs.
+        retry_policy: The id of an existing named retry policy to apply to failed
+            runs. Retry policies are managed in the smplkit console — create one
+            there, then pass its id.
         environment: Which environment to enable/run the job in (default
             'production').
         description: Optional free-text description.
@@ -284,7 +286,7 @@ def update_job(
         schedule: New cron schedule (makes the job recurring).
         run_at: New one-time run datetime (makes the job one-off).
         timezone: New IANA timezone for the cron schedule.
-        retry_policy: New named retry-policy id.
+        retry_policy: New named retry-policy id; manage policies in the console.
         description: New description.
         enabled: Enable (true) or disable (false) the job in an environment.
         environment: Environment that `enabled` applies to (default 'production').
@@ -413,6 +415,8 @@ def create_flag(
 ) -> dict[str, Any]:
     """Create a feature flag with an explicit type, key, and default value.
 
+    After creating, use set_flag to set per-environment values and targeting.
+
     Args:
         key: Unique key for the flag (its identifier, e.g. 'dark-mode').
         type: Value type — 'boolean', 'string', 'number', or 'json'.
@@ -486,7 +490,9 @@ def set_flag(
             clear it so the environment falls back to the flag's global default.
         enabled: The kill switch. False skips all rules and serves the flag's
             global default; True re-enables targeting.
-        rules: Replace this environment's targeting rules. Each rule is
+        rules: **This replaces the environment's entire rule set.** To add a rule
+            without dropping the others, call get_flag first and pass the full
+            list including the existing ones. Each rule is
             {"when": [{"attribute","operator","value"}, ...], "serve": <value>,
             "description"?: str}; conditions are AND-ed. Operators: ==, !=, >, <,
             >=, <=, in, contains. Pass [] to clear all rules.
@@ -590,7 +596,8 @@ def set_config_value(
         config_id: The config's key.
         key: The item key within the config (e.g. 'database.host').
         value: The value to set for this key in this environment.
-        environment: Environment to set the value in (default 'production').
+        environment: Environment to set the value in (default 'production'). Use
+            list_environments to see valid targets.
     """
     return _run(
         ConfigClient(_api_key(), SETTINGS.config_base_url),
@@ -629,7 +636,8 @@ def set_log_level(
     Args:
         logger_id: The logger's dot-separated key (e.g. 'sqlalchemy.engine').
         level: One of TRACE, DEBUG, INFO, WARN, ERROR, FATAL, SILENT.
-        environment: Environment to set the level in (default 'production').
+        environment: Environment to set the level in (default 'production'). Use
+            list_environments to see valid targets.
     """
     return _run(
         LoggerClient(_api_key(), SETTINGS.logging_base_url),
