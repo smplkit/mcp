@@ -1,8 +1,8 @@
 """Errors and friendly, actionable error mapping.
 
-The Jobs API speaks JSON:API errors (``{"errors": [{"status", "title",
-"detail"}]}``). The tools surface those as plain, actionable text the agent can
-act on — never a raw envelope and never the customer's API key.
+Every smplkit product API speaks JSON:API errors (``{"errors": [{"status",
+"title", "detail"}]}``). The tools surface those as plain, actionable text the
+agent can act on — never a raw envelope and never the customer's API key.
 """
 from __future__ import annotations
 
@@ -26,8 +26,8 @@ class MissingApiKeyError(Exception):
         super().__init__(message)
 
 
-class JobsApiError(Exception):
-    """Raised by :class:`~smplkit_mcp.jobs_client.JobsClient` on a non-2xx response."""
+class SmplkitApiError(Exception):
+    """Raised by a product client on a non-2xx response from a smplkit API."""
 
     def __init__(
         self,
@@ -50,8 +50,13 @@ class JobsApiError(Exception):
         return f"HTTP {self.status_code}"
 
 
-def friendly_message(exc: JobsApiError) -> str:
-    """Map a :class:`JobsApiError` to actionable, customer-facing text."""
+# Backwards-compatible alias: the Jobs client and its tests refer to this name.
+# All product clients raise the same exception type.
+JobsApiError = SmplkitApiError
+
+
+def friendly_message(exc: SmplkitApiError) -> str:
+    """Map a :class:`SmplkitApiError` to actionable, customer-facing text."""
     code = exc.status_code
     detail = exc.detail()
 
@@ -74,4 +79,4 @@ def friendly_message(exc: JobsApiError) -> str:
         return f"Conflict: {detail}"
     if code in (400, 422):
         return f"The request was rejected as invalid: {detail}"
-    return f"smplkit Jobs returned an error (HTTP {code}): {detail}"
+    return f"smplkit returned an error (HTTP {code}): {detail}"

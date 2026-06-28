@@ -3,50 +3,482 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>smplkit MCP Server</title>
+<title>smplkit MCP Server — connect your agent</title>
+<meta name="description" content="The agent-native gateway to the smplkit platform. Connect your AI agent once and operate feature flags, config, logging, audit, and scheduled jobs from your editor.">
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  background: #0a0a0a;
-  color: #a3a3a3;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  text-align: center;
+:root {
+  --bg: #0a0a0a;
+  --surface: #121212;
+  --surface-2: #161616;
+  --code-bg: #0e0e0e;
+  --border: #242424;
+  --border-hover: #383838;
+  --fg: #fafafa;
+  --fg-muted: #a3a3a3;
+  --fg-dim: #737373;
+  --fg-dimmer: #525252;
+  --accent: #f97316;
+  --accent-soft: rgba(249, 115, 22, 0.12);
+  --accent-border: rgba(249, 115, 22, 0.35);
+  --ok: #4ade80;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
-.container { max-width: 480px; padding: 2rem; }
-.logo { width: 240px; max-width: 80%; height: auto; margin-bottom: 1.25rem; }
-.product { font-size: 1.35rem; font-weight: 600; color: #fff; letter-spacing: -0.01em; margin-bottom: 0.75rem; }
-.tagline { font-size: 0.95rem; color: #a3a3a3; line-height: 1.55; margin-bottom: 0.85rem; }
-.available { font-size: 0.85rem; color: #737373; line-height: 1.5; margin-bottom: 1.75rem; }
-.available strong { color: #f97316; font-weight: 600; }
-.version { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; color: #525252; margin-bottom: 1.75rem; }
-.links { list-style: none; display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; justify-content: center; }
-.links a { color: #525252; text-decoration: none; font-size: 0.8125rem; transition: color 0.15s; }
-.links a:hover { color: #a3a3a3; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--fg-muted);
+  font-family: var(--sans);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+::selection { background: var(--accent-soft); color: var(--fg); }
+
+/* ---- layout ---- */
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 1.5rem; }
+section { padding: 3.5rem 0; border-top: 1px solid var(--border); }
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  margin-bottom: 0.85rem;
+}
+h2 { color: var(--fg); font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 0.4rem; }
+.section-sub { font-size: 0.95rem; color: var(--fg-dim); margin-bottom: 1.75rem; max-width: 56ch; }
+
+/* ---- header ---- */
+header {
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(10, 10, 10, 0.82);
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.nav { display: flex; align-items: center; gap: 1rem; height: 56px; }
+.nav .brand { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; margin-right: auto; }
+.nav .brand img { height: 22px; width: auto; }
+.nav .brand span { color: var(--fg); font-weight: 600; font-size: 0.9rem; letter-spacing: -0.01em; }
+.nav .brand span b { color: var(--accent); font-weight: 600; }
+.nav-links { display: flex; align-items: center; gap: 1.4rem; }
+.nav-links a { color: var(--fg-dim); text-decoration: none; font-size: 0.85rem; transition: color 0.15s; }
+.nav-links a:hover { color: var(--fg); }
+.btn-key {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  background: var(--accent); color: #0a0a0a;
+  font-weight: 600; font-size: 0.82rem;
+  padding: 0.42rem 0.85rem; border-radius: 7px;
+  text-decoration: none; transition: filter 0.15s, transform 0.05s;
+}
+.btn-key:hover { filter: brightness(1.08); }
+.btn-key:active { transform: translateY(1px); }
+/* On narrow screens keep only brand + the CTA so the header never overflows;
+   Connect/Capabilities/Docs/GitHub all remain reachable via the hero + footer. */
+@media (max-width: 620px) {
+  .nav-links a:not(.btn-key) { display: none; }
+  .btn-key { padding: 0.42rem 0.75rem; }
+}
+
+/* ---- hero ---- */
+.hero { text-align: center; padding: 4.5rem 0 3.75rem; border-top: none; }
+.hero .logo { width: 220px; max-width: 70%; height: auto; margin-bottom: 1.5rem; }
+.hero h1 { color: var(--fg); font-size: 2rem; font-weight: 600; letter-spacing: -0.025em; margin-bottom: 0.85rem; }
+.hero .tagline { font-size: 1.05rem; color: var(--fg-muted); line-height: 1.55; max-width: 38ch; margin: 0 auto 0.9rem; }
+.hero .platform-line { font-size: 0.9rem; color: var(--fg-dim); max-width: 46ch; margin: 0 auto 1.6rem; }
+.hero .platform-line strong { color: var(--fg-muted); font-weight: 500; }
+.hero-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; margin-bottom: 1.6rem; }
+.hero-cta a {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  text-decoration: none; font-size: 0.88rem; font-weight: 500;
+  padding: 0.55rem 1.05rem; border-radius: 8px; transition: all 0.15s;
+}
+.hero-cta .primary { background: var(--accent); color: #0a0a0a; font-weight: 600; }
+.hero-cta .primary:hover { filter: brightness(1.08); }
+.hero-cta .ghost { border: 1px solid var(--border); color: var(--fg-muted); }
+.hero-cta .ghost:hover { border-color: var(--border-hover); color: var(--fg); }
+
+/* status pill */
+.status {
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  font-family: var(--mono); font-size: 0.72rem; color: var(--fg-dim);
+  padding: 0.32rem 0.7rem; border: 1px solid var(--border); border-radius: 999px;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-dimmer); flex: none; }
+.status.live .dot { background: var(--ok); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5); animation: pulse 2.4s ease-out infinite; }
+.status .sep { color: var(--fg-dimmer); }
+.status #version { color: var(--fg-dim); }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45); }
+  70% { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+}
+
+/* ---- code blocks ---- */
+.codeblock { position: relative; background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; margin: 0.85rem 0; }
+.codeblock pre { margin: 0; padding: 0.95rem 1.05rem; overflow-x: auto; }
+.codeblock code { font-family: var(--mono); font-size: 0.8rem; line-height: 1.65; color: #d4d4d4; white-space: pre; }
+.code-label { font-family: var(--mono); font-size: 0.7rem; color: var(--fg-dim); padding: 0.6rem 1.05rem 0; }
+.copy-btn {
+  position: absolute; top: 0.55rem; right: 0.55rem;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--fg-dim);
+  font-family: var(--mono); font-size: 0.68rem; padding: 0.25rem 0.55rem;
+  border-radius: 6px; cursor: pointer; transition: all 0.15s;
+}
+.copy-btn:hover { border-color: var(--border-hover); color: var(--fg); }
+.copy-btn.copied { color: var(--ok); border-color: rgba(74, 222, 128, 0.4); }
+.tok-key { color: var(--accent); }      /* json keys */
+.tok-str { color: #9ca3af; }            /* strings */
+.tok-cmt { color: var(--fg-dimmer); }   /* comments */
+.tok-cmd { color: var(--ok); }          /* shell command name */
+
+/* ---- connect ---- */
+.connect-key {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1rem;
+  background: var(--surface); border: 1px solid var(--border); border-left: 2px solid var(--accent);
+  border-radius: 10px; padding: 1rem 1.15rem; margin-bottom: 1.75rem;
+}
+.connect-key .ck-text { flex: 1 1 280px; }
+.connect-key .ck-text b { color: var(--fg); font-weight: 600; }
+.connect-key .ck-text p { font-size: 0.85rem; color: var(--fg-dim); margin-top: 0.2rem; }
+.connect-key .btn-key { white-space: nowrap; }
+
+.tabs { display: flex; gap: 0.4rem; border-bottom: 1px solid var(--border); margin-bottom: 0.25rem; flex-wrap: wrap; }
+.tab {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--fg-dim); font-family: var(--sans); font-size: 0.85rem; font-weight: 500;
+  padding: 0.55rem 0.3rem; margin-bottom: -1px; cursor: pointer; transition: color 0.15s, border-color 0.15s;
+}
+.tab:hover { color: var(--fg-muted); }
+.tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+.panel { display: none; }
+.panel.active { display: block; }
+.panel-note { font-size: 0.8rem; color: var(--fg-dim); margin-top: 0.65rem; }
+.panel-note code { font-family: var(--mono); color: var(--fg-muted); font-size: 0.78rem; }
+
+/* ---- magic moment ---- */
+.magic {
+  background: linear-gradient(180deg, rgba(249,115,22,0.06), rgba(249,115,22,0.01));
+  border: 1px solid var(--accent-border); border-radius: 14px; padding: 1.6rem 1.5rem;
+}
+.magic .prompt {
+  font-size: 1.02rem; color: var(--fg); line-height: 1.55;
+  font-style: italic; padding-left: 0.9rem; border-left: 2px solid var(--accent);
+}
+.magic .arrow { color: var(--accent); font-family: var(--mono); font-size: 0.8rem; margin: 1rem 0 0.85rem; letter-spacing: 0.1em; }
+.magic .outcome { font-size: 0.95rem; color: var(--fg-muted); line-height: 1.6; }
+.magic .outcome b { color: var(--fg); font-weight: 600; }
+.magic .outcome .ok { color: var(--ok); font-family: var(--mono); font-weight: 600; }
+.magic .outcome .where { color: var(--fg-dim); }
+
+/* ---- capabilities ---- */
+.caps { display: grid; gap: 0; }
+.cap { display: flex; gap: 1rem; align-items: baseline; padding: 0.85rem 0; border-bottom: 1px solid var(--border); }
+.cap:last-child { border-bottom: none; }
+.cap .cap-name { font-family: var(--mono); font-size: 0.85rem; color: var(--accent); font-weight: 600; flex: 0 0 6.5rem; }
+.cap .cap-desc { font-size: 0.9rem; color: var(--fg-muted); }
+.cap .cap-desc b { color: var(--fg); font-weight: 600; }
+@media (max-width: 520px) { .cap { flex-direction: column; gap: 0.15rem; } .cap .cap-name { flex-basis: auto; } }
+
+/* ---- go deeper ---- */
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+@media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+.card {
+  display: block; text-decoration: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
+  padding: 1.1rem 1.15rem; transition: border-color 0.15s, background 0.15s, transform 0.05s;
+}
+.card:hover { border-color: var(--border-hover); background: var(--surface-2); }
+.card:active { transform: translateY(1px); }
+.card .card-title { color: var(--fg); font-weight: 600; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; }
+.card .card-title .ext { color: var(--fg-dimmer); font-size: 0.85rem; transition: color 0.15s; }
+.card:hover .card-title .ext { color: var(--accent); }
+.card .card-desc { font-size: 0.82rem; color: var(--fg-dim); margin-top: 0.3rem; line-height: 1.5; }
+.card .card-desc code { font-family: var(--mono); font-size: 0.76rem; color: var(--fg-muted); }
+
+/* ---- trust ---- */
+.trust { display: flex; flex-wrap: wrap; gap: 1rem; }
+.trust .item {
+  flex: 1 1 280px; display: flex; gap: 0.75rem; align-items: flex-start;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 1rem 1.15rem;
+}
+.trust .glyph { color: var(--accent); flex: none; font-size: 1.05rem; line-height: 1.5; }
+.trust .item p { font-size: 0.86rem; color: var(--fg-muted); line-height: 1.55; }
+.trust .item p b { color: var(--fg); font-weight: 600; }
+.trust .item p code { font-family: var(--mono); font-size: 0.78rem; color: var(--fg-dim); }
+
+/* ---- footer ---- */
+footer { border-top: 1px solid var(--border); padding: 2rem 0 2.5rem; }
+.foot { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; align-items: center; justify-content: space-between; }
+.foot .links { display: flex; flex-wrap: wrap; gap: 1.25rem; list-style: none; }
+.foot .links a { color: var(--fg-dimmer); text-decoration: none; font-size: 0.8rem; transition: color 0.15s; }
+.foot .links a:hover { color: var(--fg-muted); }
+.foot .copy { color: var(--fg-dimmer); font-size: 0.78rem; }
 </style>
 </head>
 <body>
-<div class="container">
-<img class="logo" src="__LOGO_SRC__" alt="smplkit">
-<div class="product">MCP Server</div>
-<div class="tagline">The agent-native gateway to the smplkit platform — connect your AI agent once and let it operate smplkit on your behalf.</div>
-<div class="available">Available now: <strong>Smpl Jobs</strong> — schedule, run, and monitor HTTP jobs. More of the platform to come.</div>
-<div class="version" id="version"></div>
-<ul class="links">
-<li><a href="https://docs.smplkit.com">Documentation</a></li>
-<li><a href="https://github.com/smplkit/mcp">GitHub</a></li>
-<li><a href="https://www.smplkit.com">smplkit.com</a></li>
-</ul>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top">
+      <img src="__LOGO_SRC__" alt="smplkit">
+      <span>MCP <b>Server</b></span>
+    </a>
+    <nav class="nav-links">
+      <a href="#connect">Connect</a>
+      <a href="#capabilities">Capabilities</a>
+      <a href="https://docs.smplkit.com">Docs</a>
+      <a href="https://github.com/smplkit/mcp">GitHub</a>
+      <a class="btn-key" href="https://app.smplkit.com">Create API key →</a>
+    </nav>
+  </div>
+</header>
+
+<a id="top"></a>
+<div class="wrap hero">
+  <img class="logo" src="__LOGO_SRC__" alt="smplkit">
+  <h1>smplkit MCP Server</h1>
+  <p class="tagline">The agent-native gateway to the smplkit platform — connect your AI agent once and let it operate smplkit on your behalf.</p>
+  <p class="platform-line">Manage the whole platform from your editor: <strong>feature flags, config, logging, audit, and scheduled jobs</strong>.</p>
+  <div class="hero-cta">
+    <a class="primary" href="#connect">Connect in 30 seconds</a>
+    <a class="ghost" href="https://docs.smplkit.com">Read the docs</a>
+  </div>
+  <div class="status" id="status">
+    <span class="dot"></span>
+    <span id="status-text">checking status…</span>
+    <span class="sep" id="status-sep" hidden>·</span>
+    <span id="version"></span>
+  </div>
 </div>
+
+<!-- 1. CONNECT -->
+<section id="connect">
+  <div class="wrap">
+    <div class="eyebrow">Connect in 30 seconds</div>
+    <h2>Point your MCP client at one URL</h2>
+    <p class="section-sub">The agent connects over streamable HTTP and authenticates with your smplkit API key as a bearer token. No install, no local process.</p>
+
+    <div class="connect-key">
+      <div class="ck-text">
+        <b>First, get an API key.</b>
+        <p>Sign up with <b style="color:var(--fg-muted)">Google or Microsoft (SSO)</b> — you arrive email-verified, so you can mint a key immediately.</p>
+      </div>
+      <a class="btn-key" href="https://app.smplkit.com">Create an API key →</a>
+    </div>
+
+    <div class="code-label">Server URL</div>
+    <div class="codeblock">
+      <button class="copy-btn" type="button">Copy</button>
+      <pre><code>https://mcp.smplkit.com/api/mcp</code></pre>
+    </div>
+    <p class="panel-note">Authenticate with <code>Authorization: Bearer YOUR_SMPLKIT_API_KEY</code> (a custom <code>X-Smplkit-Api-Key</code> header is also accepted).</p>
+
+    <div class="tabs" role="tablist" style="margin-top:1.75rem">
+      <button class="tab active" data-tab="cc" role="tab">Claude Code</button>
+      <button class="tab" data-tab="cursor" role="tab">Cursor</button>
+      <button class="tab" data-tab="desktop" role="tab">Claude Desktop</button>
+    </div>
+
+    <!-- Claude Code -->
+    <div class="panel active" data-panel="cc">
+      <div class="code-label">CLI</div>
+      <div class="codeblock">
+        <button class="copy-btn" type="button">Copy</button>
+        <pre><code><span class="tok-cmd">claude</span> mcp add --transport http smplkit https://mcp.smplkit.com/api/mcp \
+  --header <span class="tok-str">"Authorization: Bearer YOUR_SMPLKIT_API_KEY"</span></code></pre>
+      </div>
+      <div class="code-label">…or in <code>.mcp.json</code></div>
+      <div class="codeblock">
+        <button class="copy-btn" type="button">Copy</button>
+        <pre><code>{
+  <span class="tok-key">"mcpServers"</span>: {
+    <span class="tok-key">"smplkit"</span>: {
+      <span class="tok-key">"type"</span>: <span class="tok-str">"http"</span>,
+      <span class="tok-key">"url"</span>: <span class="tok-str">"https://mcp.smplkit.com/api/mcp"</span>,
+      <span class="tok-key">"headers"</span>: { <span class="tok-key">"Authorization"</span>: <span class="tok-str">"Bearer ${SMPLKIT_API_KEY}"</span> }
+    }
+  }
+}</code></pre>
+      </div>
+    </div>
+
+    <!-- Cursor -->
+    <div class="panel" data-panel="cursor">
+      <div class="code-label"><code>~/.cursor/mcp.json</code> or project <code>.cursor/mcp.json</code></div>
+      <div class="codeblock">
+        <button class="copy-btn" type="button">Copy</button>
+        <pre><code>{
+  <span class="tok-key">"mcpServers"</span>: {
+    <span class="tok-key">"smplkit"</span>: {
+      <span class="tok-key">"url"</span>: <span class="tok-str">"https://mcp.smplkit.com/api/mcp"</span>,
+      <span class="tok-key">"headers"</span>: { <span class="tok-key">"Authorization"</span>: <span class="tok-str">"Bearer ${env:SMPLKIT_API_KEY}"</span> }
+    }
+  }
+}</code></pre>
+      </div>
+    </div>
+
+    <!-- Claude Desktop -->
+    <div class="panel" data-panel="desktop">
+      <div class="code-label"><code>claude_desktop_config.json</code></div>
+      <div class="codeblock">
+        <button class="copy-btn" type="button">Copy</button>
+        <pre><code>{
+  <span class="tok-key">"mcpServers"</span>: {
+    <span class="tok-key">"smplkit"</span>: {
+      <span class="tok-key">"command"</span>: <span class="tok-str">"npx"</span>,
+      <span class="tok-key">"args"</span>: [
+        <span class="tok-str">"-y"</span>, <span class="tok-str">"mcp-remote"</span>, <span class="tok-str">"https://mcp.smplkit.com/api/mcp"</span>,
+        <span class="tok-str">"--header"</span>, <span class="tok-str">"Authorization:${AUTH_HEADER}"</span>
+      ],
+      <span class="tok-key">"env"</span>: { <span class="tok-key">"AUTH_HEADER"</span>: <span class="tok-str">"Bearer YOUR_SMPLKIT_API_KEY"</span> }
+    }
+  }
+}</code></pre>
+      </div>
+      <p class="panel-note">Desktop bridges remote servers through <code>mcp-remote</code>. Note the header value has <b style="color:var(--fg-muted)">no space after the colon</b> in <code>args</code> (a known mcp-remote quirk); the spaced value goes in <code>env</code>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 2. MAGIC MOMENT -->
+<section id="magic">
+  <div class="wrap">
+    <div class="eyebrow">The magic moment</div>
+    <h2>Say it once. Watch it happen.</h2>
+    <p class="section-sub">No dashboards, no YAML, no leaving your editor. You describe the outcome; your agent makes it real and proves it.</p>
+    <div class="magic">
+      <p class="prompt">“Schedule my cleanup endpoint to run nightly at 2am, and run it once to prove it works.”</p>
+      <div class="arrow">↓</div>
+      <p class="outcome">Your agent <b>creates the job</b>, <b>fires it on demand</b>, and shows you the real <span class="ok">200</span> <span class="where">— without leaving your editor.</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- 3. WHAT YOU CAN DO -->
+<section id="capabilities">
+  <div class="wrap">
+    <div class="eyebrow">What you can do</div>
+    <h2>One server, the whole platform</h2>
+    <p class="section-sub">Plain-language intent in; the agent handles the JSON:API envelopes, per-environment nesting, and read-modify-write for you.</p>
+    <div class="caps">
+      <div class="cap"><div class="cap-name">Flags</div><div class="cap-desc">Create and toggle <b>feature flags</b> with per-environment values and targeting.</div></div>
+      <div class="cap"><div class="cap-name">Config</div><div class="cap-desc">Set and read <b>keyed, typed config</b> with per-environment overrides.</div></div>
+      <div class="cap"><div class="cap-name">Logging</div><div class="cap-desc">Change <b>runtime log levels</b> per environment to debug live, then reset.</div></div>
+      <div class="cap"><div class="cap-name">Audit</div><div class="cap-desc">Search the <b>audit log</b> and wire SIEM forwarders to Datadog, Splunk, and more.</div></div>
+      <div class="cap"><div class="cap-name">Jobs</div><div class="cap-desc">Run <b>scheduled HTTP jobs</b> — cron, one-off, or on-demand — with response capture.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4. GO DEEPER -->
+<section id="deeper">
+  <div class="wrap">
+    <div class="eyebrow">Go deeper</div>
+    <h2>Everything else</h2>
+    <p class="section-sub">Full setup, the complete tool reference, runnable examples, and source.</p>
+    <div class="cards">
+      <a class="card" href="https://docs.smplkit.com">
+        <div class="card-title">Documentation <span class="ext">↗</span></div>
+        <div class="card-desc">Full setup and the complete tool reference at docs.smplkit.com.</div>
+      </a>
+      <a class="card" href="https://registry.modelcontextprotocol.io">
+        <div class="card-title">MCP Registry <span class="ext">↗</span></div>
+        <div class="card-desc">The official listing — <code>com.smplkit/mcp</code>.</div>
+      </a>
+      <a class="card" href="https://github.com/smplkit/mcp/tree/main/examples">
+        <div class="card-title">Examples <span class="ext">↗</span></div>
+        <div class="card-desc">Small, real projects you can deploy and schedule from your agent.</div>
+      </a>
+      <a class="card" href="https://github.com/smplkit/mcp">
+        <div class="card-title">GitHub <span class="ext">↗</span></div>
+        <div class="card-desc">Source, the bundled skill, and the architecture notes.</div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- 5. TRUST -->
+<section id="trust">
+  <div class="wrap">
+    <div class="eyebrow">Trust</div>
+    <div class="trust">
+      <div class="item">
+        <span class="glyph">✓</span>
+        <p><b>Listed in the official MCP Registry</b> as <code>com.smplkit/mcp</code> — discoverable and verified by DNS namespace.</p>
+      </div>
+      <div class="item">
+        <span class="glyph">⛨</span>
+        <p>The server is <b>stateless</b>. Your API key is forwarded per request to the smplkit APIs and is <b>never stored</b> or logged.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <ul class="links">
+      <li><a href="https://docs.smplkit.com">Documentation</a></li>
+      <li><a href="https://github.com/smplkit/mcp">GitHub</a></li>
+      <li><a href="https://registry.modelcontextprotocol.io">MCP Registry</a></li>
+      <li><a href="https://www.smplkit.com">smplkit.com</a></li>
+    </ul>
+    <span class="copy">© smplkit · MCP Server</span>
+  </div>
+</footer>
+
 <script>
+// --- liveness: status pill + version ---
 fetch("/api/liveness").then(function (r) { return r.json(); }).then(function (d) {
+  var status = document.getElementById("status");
+  var text = document.getElementById("status-text");
+  status.classList.add("live");
+  text.textContent = "Operational";
   var v = (d.version || "").trim();
-  if (!v) { return; }
-  document.getElementById("version").textContent = /^\d+\.\d+\.\d+/.test(v) ? ("v" + v) : v;
-}).catch(function () {});
+  if (v) {
+    var label = /^\d+\.\d+\.\d+/.test(v) ? ("v" + v) : v;
+    document.getElementById("status-sep").hidden = false;
+    document.getElementById("version").textContent = label;
+  }
+}).catch(function () {
+  document.getElementById("status-text").textContent = "status unavailable";
+});
+
+// --- tabs ---
+document.querySelectorAll(".tab").forEach(function (tab) {
+  tab.addEventListener("click", function () {
+    var id = tab.getAttribute("data-tab");
+    document.querySelectorAll(".tab").forEach(function (t) { t.classList.toggle("active", t === tab); });
+    document.querySelectorAll(".panel").forEach(function (p) {
+      p.classList.toggle("active", p.getAttribute("data-panel") === id);
+    });
+  });
+});
+
+// --- copy buttons ---
+document.querySelectorAll(".copy-btn").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var code = btn.parentElement.querySelector("code");
+    var text = code ? code.innerText : "";
+    var done = function () {
+      var orig = btn.textContent;
+      btn.textContent = "Copied";
+      btn.classList.add("copied");
+      setTimeout(function () { btn.textContent = orig; btn.classList.remove("copied"); }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () {});
+    } else {
+      var ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+  });
+});
 </script>
 </body>
 </html>

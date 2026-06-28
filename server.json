@@ -2,12 +2,12 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "com.smplkit/mcp",
   "title": "smplkit MCP Server",
-  "description": "Schedule HTTP jobs from your AI agent — cron, one-off, or on-demand, with response capture.",
+  "description": "Operate smplkit from your agent: feature flags, config, logging, audit, and scheduled jobs.",
   "repository": {
     "url": "https://github.com/smplkit/mcp",
     "source": "github"
   },
-  "version": "0.1.3",
+  "version": "0.2.1",
   "remotes": [
     {
       "type": "streamable-http",
