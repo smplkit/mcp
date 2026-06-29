@@ -531,10 +531,15 @@ def set_flag(
 
 @mcp.tool
 def delete_flag(key: str) -> dict[str, Any]:
-    """Delete a flag.
+    """Permanently delete a flag and all of its per-environment values and rules.
+
+    There is no undo — recreate it with create_flag if needed. Afterward, SDKs that
+    still evaluate this key serve the code-level default passed to their flag handle.
+    To stop serving a flag without deleting it, prefer set_flag with enabled=false
+    (the kill switch), which keeps the flag and its targeting intact.
 
     Args:
-        key: The flag's key.
+        key: The flag's key (e.g. 'dark-mode').
     """
     return _run(FlagsClient(_api_key(), SETTINGS.flags_base_url), flags.delete_flag, key=key)
 
@@ -552,7 +557,12 @@ def create_config(
     parent: str | None = None,
     items: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Create a named config — a keyed collection of typed values.
+    """Create a named config: a keyed collection of typed values your code reads at runtime.
+
+    Each key holds one typed value that can be overridden per environment with
+    set_config_value. Seed the starting keys here via `items`, or create the config
+    empty and let set_config_value auto-declare keys later. Use `parent` to inherit
+    another config's keys.
 
     Args:
         name: Human-readable name for the config.
@@ -633,7 +643,11 @@ def set_config_value(
 
 @mcp.tool
 def delete_config(config_id: str) -> dict[str, Any]:
-    """Delete a config.
+    """Permanently delete a config and all of its keys and per-environment values.
+
+    There is no undo — recreate it with create_config if needed. Afterward, SDKs
+    reading these keys fall back to their code-level defaults. To change or clear a
+    single value, use set_config_value instead of deleting the whole config.
 
     Args:
         config_id: The config's key.
@@ -678,10 +692,15 @@ def list_loggers(
     search: str | None = None,
     limit: int | None = None,
 ) -> dict[str, Any]:
-    """List managed loggers and their account-wide and per-environment levels.
+    """List the loggers smplkit knows about, with their account-wide and per-environment levels.
+
+    Includes loggers you've set a level on (managed) and those an SDK has reported
+    observing (discovered) — filter with `managed`. Use it to discover the
+    dot-separated logger keys you can then target with set_log_level.
 
     Args:
-        managed: True for managed loggers only, False for SDK-observed only.
+        managed: True for managed loggers only, False for SDK-observed (discovered)
+            only; omit for all.
         service: Restrict to loggers observed from this service.
         search: Case-insensitive substring match on key and name.
         limit: Maximum number of loggers to return.
@@ -695,10 +714,14 @@ def list_loggers(
 
 @mcp.tool
 def get_logger(logger_id: str) -> dict[str, Any]:
-    """Get one logger's config: account-wide level plus per-environment levels.
+    """Get one logger's configuration: its account-wide default level and per-environment overrides.
+
+    Use it to check the current level before or after set_log_level / reset_logger.
+    Logger keys are dot-separated (e.g. 'sqlalchemy.engine'); list_loggers shows
+    which keys exist.
 
     Args:
-        logger_id: The logger's dot-separated key.
+        logger_id: The logger's dot-separated key (e.g. 'sqlalchemy.engine').
     """
     return _run(LoggerClient(_api_key(), SETTINGS.logging_base_url), loggers.get_logger,
                 logger_id=logger_id)
@@ -735,7 +758,12 @@ def query_events(
     search: str | None = None,
     limit: int = 50,
 ) -> dict[str, Any]:
-    """Search the audit log by actor, resource, category, severity, and/or time.
+    """Search the immutable audit log — "who changed what, and when?".
+
+    Returns matching events newest-first. Every filter is optional and they combine
+    (AND) — call with none to see the most recent activity. Example: resource_type='flag'
+    with since='2026-06-01T00:00:00Z' lists this month's flag changes. Read-only; pass an
+    event's id to get_event to drill into one result.
 
     Args:
         actor_type: Kind of actor (e.g. 'USER', 'API_KEY', 'SYSTEM').
@@ -763,10 +791,14 @@ def query_events(
 
 @mcp.tool
 def get_event(event_id: str) -> dict[str, Any]:
-    """Get one audit event's full detail.
+    """Fetch one audit event by id, with its full detail.
+
+    Returns the event's actor, resource (type and id), event type, category,
+    severity, timestamp, and its `data` payload. Find an event id with query_events
+    first; use this to drill into a single event.
 
     Args:
-        event_id: The event's id.
+        event_id: The event's id (from query_events results).
     """
     return _run(AuditClient(_api_key(), SETTINGS.audit_base_url), audit.get_event,
                 event_id=event_id)
