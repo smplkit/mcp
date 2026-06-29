@@ -21,31 +21,75 @@ prod,"* *"stream audit events to Datadog,"* or *"POST my endpoint every morning 
 7."* It makes the change, proves it works, and answers follow-up questions
 straight from the live state.
 
-It is a thin, **stateless** HTTP client to the smplkit product APIs. Your smplkit
-API key is forwarded per request and never stored.
+It is a thin, **stateless** HTTP client to the smplkit product APIs — it holds no
+credential of its own.
 
 ## Connect once
 
-### 1. Get a smplkit API key
+### 1. Add the server and sign in
 
-Sign up at **https://smplkit.com**. **Use Google or Microsoft (SSO)** — an SSO
-sign-up is email-verified instantly, so you can mint a key right away. Then
-create an **API key** in the console.
-
-### 2. Add the server to your MCP client
-
-The server lives at **`https://mcp.smplkit.com/api/mcp`**. Authenticate with your
-key via the `Authorization: Bearer <key>` header (a custom `X-Smplkit-Api-Key`
-header is also accepted).
+The server lives at **`https://mcp.smplkit.com/api/mcp`**. Point your MCP client
+at that URL — the first time it connects, the client opens your browser for a
+**one-time sign-in** (**Continue with Google or Microsoft**, standard OAuth).
+After that it reconnects and refreshes access on its own; there's no key to mint,
+copy, or rotate.
 
 **Claude Code** (CLI):
 
 ```bash
-claude mcp add --transport http smplkit https://mcp.smplkit.com/api/mcp \
-  --header "Authorization: Bearer YOUR_SMPLKIT_API_KEY"
+claude mcp add --transport http smplkit https://mcp.smplkit.com/api/mcp
 ```
 
 …or in `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "smplkit": {
+      "type": "http",
+      "url": "https://mcp.smplkit.com/api/mcp"
+    }
+  }
+}
+```
+
+**Cursor** (`~/.cursor/mcp.json` or project `.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "smplkit": {
+      "url": "https://mcp.smplkit.com/api/mcp"
+    }
+  }
+}
+```
+
+**Claude Desktop** (`claude_desktop_config.json`) — Desktop bridges remote
+servers through `mcp-remote`, which opens a browser for the one-time sign-in and
+caches the connection:
+
+```json
+{
+  "mcpServers": {
+    "smplkit": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://mcp.smplkit.com/api/mcp"]
+    }
+  }
+}
+```
+
+#### Prefer a static key?
+
+For non-interactive use — CI, scripts, headless clients, or writing code with the
+[smplkit SDKs](https://docs.smplkit.com/products/sdks/python) — skip the browser
+and authenticate with an API key as a bearer token. Sign up at
+**https://smplkit.com** (Google or Microsoft SSO, email-verified instantly),
+create an **API key** in the console, and send it as
+`Authorization: Bearer YOUR_SMPLKIT_API_KEY` (a custom `X-Smplkit-Api-Key` header
+is also accepted). The SDKs read the same key from `SMPLKIT_API_KEY`. For example,
+add a `headers` block to the config above:
 
 ```json
 {
@@ -59,39 +103,7 @@ claude mcp add --transport http smplkit https://mcp.smplkit.com/api/mcp \
 }
 ```
 
-**Cursor** (`~/.cursor/mcp.json` or project `.cursor/mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "smplkit": {
-      "url": "https://mcp.smplkit.com/api/mcp",
-      "headers": { "Authorization": "Bearer ${env:SMPLKIT_API_KEY}" }
-    }
-  }
-}
-```
-
-**Claude Desktop** (`claude_desktop_config.json`) — Desktop bridges remote
-servers through `mcp-remote`. Note the header value has **no space after the
-colon** in `args` (a known mcp-remote quirk); the spaced value goes in `env`:
-
-```json
-{
-  "mcpServers": {
-    "smplkit": {
-      "command": "npx",
-      "args": [
-        "-y", "mcp-remote", "https://mcp.smplkit.com/api/mcp",
-        "--header", "Authorization:${AUTH_HEADER}"
-      ],
-      "env": { "AUTH_HEADER": "Bearer YOUR_SMPLKIT_API_KEY" }
-    }
-  }
-}
-```
-
-### 3. Ask your agent
+### 2. Ask your agent
 
 > "Create a boolean flag `new-checkout`, off by default, then turn it on in prod
 > only for enterprise users."
@@ -192,8 +204,9 @@ pytest -m acceptance
 
 - **Stateless** Python service built on [FastMCP](https://gofastmcp.com): it holds
   no database and no platform credential of its own.
-- Auth is **per request** — your API key arrives as a header, is forwarded as the
-  `Bearer` token to each product API, and is never cached or logged.
+- Auth is **per request** — whether the caller signs in with OAuth or sends an API
+  key, the credential is validated and used per request to reach each product API,
+  and is never cached or logged.
 - One thin JSON:API HTTP client per product (flags, config, logging, audit,
   environments), each pointed at its own configurable base host.
 - The MCP endpoint is served under `/api/mcp` with a stateless, JSON-response
