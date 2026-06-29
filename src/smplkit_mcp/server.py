@@ -82,7 +82,13 @@ INSTRUCTIONS = (
     "Use list_environments to discover the valid environment targets for every "
     "set_* tool and for jobs. Most set_* tools read-modify-write the full resource, "
     "so you express a partial change and the tool preserves the rest. Job and "
-    "forwarder target URLs must be reachable from the public internet."
+    "forwarder target URLs must be reachable from the public internet. "
+    "When you are WRITING application code (not just operating the platform), the "
+    "smplkit SDKs — Python, TypeScript, Go, Java, C#, Ruby — resolve flags, read "
+    "config, install the dynamic-logging adapter, and emit audit events in-process; "
+    "author the SDK call, then provision and verify the resource with these tools. "
+    "SDK docs: https://docs.smplkit.com/products/sdks/<language> "
+    "(index: https://docs.smplkit.com/llms.txt)."
 )
 
 mcp: FastMCP = FastMCP(
