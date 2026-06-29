@@ -60,7 +60,7 @@ header {
 }
 .nav { display: flex; align-items: center; gap: 1rem; height: 56px; }
 .nav .brand { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; margin-right: auto; }
-.nav .brand img { height: 22px; width: auto; }
+.nav .brand img { height: 30px; width: auto; }
 .nav .brand span { color: var(--fg); font-weight: 600; font-size: 0.9rem; letter-spacing: -0.01em; }
 .nav .brand span b { color: var(--accent); font-weight: 600; }
 .nav-links { display: flex; align-items: center; gap: 1.4rem; }
@@ -75,6 +75,9 @@ header {
 }
 .btn-key:hover { filter: brightness(1.08); }
 .btn-key:active { transform: translateY(1px); }
+/* Keep the CTA text crisp black on orange — `.nav-links a` (higher specificity)
+   would otherwise win and render it muted gray. */
+.nav-links a.btn-key { color: #0a0a0a; }
 /* On narrow screens keep only brand + the CTA so the header never overflows;
    Connect/Capabilities/Docs/GitHub all remain reachable via the hero + footer. */
 @media (max-width: 620px) {
@@ -144,6 +147,13 @@ header {
 .connect-key .ck-text b { color: var(--fg); font-weight: 600; }
 .connect-key .ck-text p { font-size: 0.85rem; color: var(--fg-dim); margin-top: 0.2rem; }
 .connect-key .btn-key { white-space: nowrap; }
+
+/* demoted alternative: static API key (SDKs / CI / non-interactive) */
+.alt-auth { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.1rem 1.2rem; margin-top: 1.75rem; }
+.alt-auth h3 { color: var(--fg); font-size: 0.95rem; font-weight: 600; margin-bottom: 0.35rem; }
+.alt-auth p { font-size: 0.85rem; color: var(--fg-dim); margin-bottom: 0.95rem; }
+.alt-auth p code { font-family: var(--mono); font-size: 0.78rem; color: var(--fg-muted); }
+.alt-auth p a { color: var(--fg-muted); }
 
 .tabs { display: flex; gap: 0.4rem; border-bottom: 1px solid var(--border); margin-bottom: 0.25rem; flex-wrap: wrap; }
 .tab {
@@ -231,7 +241,7 @@ footer { border-top: 1px solid var(--border); padding: 2rem 0 2.5rem; }
       <a href="#capabilities">Capabilities</a>
       <a href="https://docs.smplkit.com">Docs</a>
       <a href="https://github.com/smplkit/mcp">GitHub</a>
-      <a class="btn-key" href="https://app.smplkit.com">Create API key →</a>
+      <a class="btn-key" href="#connect">Connect →</a>
     </nav>
   </div>
 </header>
@@ -259,14 +269,13 @@ footer { border-top: 1px solid var(--border); padding: 2rem 0 2.5rem; }
   <div class="wrap">
     <div class="eyebrow">Connect in 30 seconds</div>
     <h2>Point your MCP client at one URL</h2>
-    <p class="section-sub">The agent connects over streamable HTTP and authenticates with your smplkit API key as a bearer token. No install, no local process.</p>
+    <p class="section-sub">Add the server URL to your MCP client and sign in once in the browser — Google or Microsoft SSO. No key to mint, copy, or rotate. The agent connects over streamable HTTP; no install, no local process.</p>
 
     <div class="connect-key">
       <div class="ck-text">
-        <b>First, get an API key.</b>
-        <p>Sign up with <b style="color:var(--fg-muted)">Google or Microsoft (SSO)</b> — you arrive email-verified, so you can mint a key immediately.</p>
+        <b>Sign in once — no API key to paste.</b>
+        <p>On the first connection your client opens a browser for a one-time SSO sign-in (<b style="color:var(--fg-muted)">Google or Microsoft</b>) — standard OAuth. After that it reconnects and refreshes access on its own; you're not prompted again unless you disconnect.</p>
       </div>
-      <a class="btn-key" href="https://app.smplkit.com">Create an API key →</a>
     </div>
 
     <div class="code-label">Server URL</div>
@@ -274,7 +283,7 @@ footer { border-top: 1px solid var(--border); padding: 2rem 0 2.5rem; }
       <button class="copy-btn" type="button">Copy</button>
       <pre><code>https://mcp.smplkit.com/api/mcp</code></pre>
     </div>
-    <p class="panel-note">Authenticate with <code>Authorization: Bearer YOUR_SMPLKIT_API_KEY</code> (a custom <code>X-Smplkit-Api-Key</code> header is also accepted).</p>
+    <p class="panel-note">Your client handles authentication for you: the first connection opens a browser to sign in, then it refreshes access in the background — no token to manage.</p>
 
     <div class="tabs" role="tablist" style="margin-top:1.75rem">
       <button class="tab active" data-tab="cc" role="tab">Claude Code</button>
@@ -287,8 +296,7 @@ footer { border-top: 1px solid var(--border); padding: 2rem 0 2.5rem; }
       <div class="code-label">CLI</div>
       <div class="codeblock">
         <button class="copy-btn" type="button">Copy</button>
-        <pre><code><span class="tok-cmd">claude</span> mcp add --transport http smplkit https://mcp.smplkit.com/api/mcp \
-  --header <span class="tok-str">"Authorization: Bearer YOUR_SMPLKIT_API_KEY"</span></code></pre>
+        <pre><code><span class="tok-cmd">claude</span> mcp add --transport http smplkit https://mcp.smplkit.com/api/mcp</code></pre>
       </div>
       <div class="code-label">…or in <code>.mcp.json</code></div>
       <div class="codeblock">
@@ -297,12 +305,12 @@ footer { border-top: 1px solid var(--border); padding: 2rem 0 2.5rem; }
   <span class="tok-key">"mcpServers"</span>: {
     <span class="tok-key">"smplkit"</span>: {
       <span class="tok-key">"type"</span>: <span class="tok-str">"http"</span>,
-      <span class="tok-key">"url"</span>: <span class="tok-str">"https://mcp.smplkit.com/api/mcp"</span>,
-      <span class="tok-key">"headers"</span>: { <span class="tok-key">"Authorization"</span>: <span class="tok-str">"Bearer ${SMPLKIT_API_KEY}"</span> }
+      <span class="tok-key">"url"</span>: <span class="tok-str">"https://mcp.smplkit.com/api/mcp"</span>
     }
   }
 }</code></pre>
       </div>
+      <p class="panel-note">On first use Claude Code opens your browser to sign in, then remembers the connection.</p>
     </div>
 
     <!-- Cursor -->
@@ -313,12 +321,12 @@ footer { border-top: 1px solid var(--border); padding: 2rem 0 2.5rem; }
         <pre><code>{
   <span class="tok-key">"mcpServers"</span>: {
     <span class="tok-key">"smplkit"</span>: {
-      <span class="tok-key">"url"</span>: <span class="tok-str">"https://mcp.smplkit.com/api/mcp"</span>,
-      <span class="tok-key">"headers"</span>: { <span class="tok-key">"Authorization"</span>: <span class="tok-str">"Bearer ${env:SMPLKIT_API_KEY}"</span> }
+      <span class="tok-key">"url"</span>: <span class="tok-str">"https://mcp.smplkit.com/api/mcp"</span>
     }
   }
 }</code></pre>
       </div>
+      <p class="panel-note">Cursor prompts you to sign in the first time you use the server.</p>
     </div>
 
     <!-- Claude Desktop -->
@@ -330,16 +338,18 @@ footer { border-top: 1px solid var(--border); padding: 2rem 0 2.5rem; }
   <span class="tok-key">"mcpServers"</span>: {
     <span class="tok-key">"smplkit"</span>: {
       <span class="tok-key">"command"</span>: <span class="tok-str">"npx"</span>,
-      <span class="tok-key">"args"</span>: [
-        <span class="tok-str">"-y"</span>, <span class="tok-str">"mcp-remote"</span>, <span class="tok-str">"https://mcp.smplkit.com/api/mcp"</span>,
-        <span class="tok-str">"--header"</span>, <span class="tok-str">"Authorization:${AUTH_HEADER}"</span>
-      ],
-      <span class="tok-key">"env"</span>: { <span class="tok-key">"AUTH_HEADER"</span>: <span class="tok-str">"Bearer YOUR_SMPLKIT_API_KEY"</span> }
+      <span class="tok-key">"args"</span>: [<span class="tok-str">"-y"</span>, <span class="tok-str">"mcp-remote"</span>, <span class="tok-str">"https://mcp.smplkit.com/api/mcp"</span>]
     }
   }
 }</code></pre>
       </div>
-      <p class="panel-note">Desktop bridges remote servers through <code>mcp-remote</code>. Note the header value has <b style="color:var(--fg-muted)">no space after the colon</b> in <code>args</code> (a known mcp-remote quirk); the spaced value goes in <code>env</code>.</p>
+      <p class="panel-note">Desktop bridges remote servers through <code>mcp-remote</code>, which opens a browser for the one-time sign-in and caches the connection.</p>
+    </div>
+
+    <div class="alt-auth">
+      <h3>Prefer a static key?</h3>
+      <p>For non-interactive use — CI, scripts, or writing code with the <a href="https://docs.smplkit.com/products/sdks/python">smplkit SDKs</a> — skip the browser and authenticate with an API key as a bearer token: add <code>Authorization: Bearer YOUR_SMPLKIT_API_KEY</code> to the server config (a custom <code>X-Smplkit-Api-Key</code> header also works). The SDKs read the same key from <code>SMPLKIT_API_KEY</code>.</p>
+      <a class="btn-key" href="https://app.smplkit.com">Create an API key →</a>
     </div>
   </div>
 </section>
@@ -412,7 +422,7 @@ footer { border-top: 1px solid var(--border); padding: 2rem 0 2.5rem; }
       </div>
       <div class="item">
         <span class="glyph">⛨</span>
-        <p>The server is <b>stateless</b>. Your API key is forwarded per request to the smplkit APIs and is <b>never stored</b> or logged.</p>
+        <p>The server is <b>stateless</b> and holds <b>no credentials</b>. Whether you connect with OAuth or an API key, nothing is persisted or logged — tokens are validated and used per request only.</p>
       </div>
     </div>
   </div>
