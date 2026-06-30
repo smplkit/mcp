@@ -28,6 +28,16 @@ _landing_html = (_STATIC / "landing.html").read_text(encoding="utf-8").replace(
     "__LOGO_SRC__", f"data:image/png;base64,{_logo_b64}"
 )
 
+# Glama connector ownership verification (https://glama.ai/mcp/faq). The file
+# `static/.well-known/glama.json` is served at
+# https://mcp.smplkit.com/.well-known/glama.json — CloudFront's default route
+# sends /.well-known/* (other than oauth-protected-resource*) to the landing
+# bucket. It's a fixed ownership doc (maintainer email), not dynamic content,
+# so it lives as a static object. ProductServiceStack manages only
+# `landing_page_html`, so it's published manually from the committed source:
+#   aws s3 cp static/.well-known/glama.json \
+#     s3://<landing bucket>/.well-known/glama.json --content-type application/json
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
