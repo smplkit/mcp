@@ -104,6 +104,9 @@ stack = ProductServiceStack(
     route53_public_zone_id=platform.require_output("route53_public_zone_id"),
     route53_private_zone_id=platform.get_output("route53_private_zone_id"),
     cloudfront_origin_secret=cloudfront_origin_secret,
+    # ADR-059: associate this service's CloudFront with the shared platform
+    # WebACL instead of creating a per-service one.
+    waf_web_acl_arn=platform.require_output("shared_waf_web_acl_arn"),
     # Stateless: no db_secret_arn, no rds_security_group_id, no worker_command.
 )
 
