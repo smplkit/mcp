@@ -1,3 +1,3 @@
 pulumi>=3.244.0,<4.0.0
 pulumi-aws>=7.31.0,<8.0.0
-smplkit-infra>=1.10.0,<2.0.0
+smplkit-infra>=1.11.0,<2.0.0

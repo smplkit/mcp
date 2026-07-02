@@ -107,6 +107,15 @@ stack = ProductServiceStack(
     # ADR-059: associate this service's CloudFront with the shared platform
     # WebACL instead of creating a per-service one.
     waf_web_acl_arn=platform.require_output("shared_waf_web_acl_arn"),
+    # ADR-059 Stage 2b: attach to the shared platform ALBs (priority 150).
+    shared_public_listener_arn=platform.require_output("shared_public_listener_arn"),
+    shared_internal_listener_arn=platform.require_output("shared_internal_listener_arn"),
+    shared_public_alb_sg_id=platform.require_output("shared_public_alb_sg_id"),
+    shared_internal_alb_sg_id=platform.require_output("shared_internal_alb_sg_id"),
+    shared_public_alb_dns_name=platform.require_output("shared_public_alb_dns_name"),
+    shared_internal_alb_dns_name=platform.require_output("shared_internal_alb_dns_name"),
+    shared_internal_alb_zone_id=platform.require_output("shared_internal_alb_zone_id"),
+    listener_rule_priority=150,
     # Stateless: no db_secret_arn, no rds_security_group_id, no worker_command.
 )
 
