@@ -74,6 +74,13 @@ _oauth_env = (
     else {}
 )
 
+# Scenario B cutover: when mcp:cutoverToHost is true, serve this service from
+# the consolidated single-host platform and turn its Fargate task off.
+cutover_to_host = config.get_bool("cutoverToHost") or False
+host_origin_domain = platform.get_output("hostOriginDomain") if cutover_to_host else None
+host_origin_secret = platform.get_output("hostOriginSecret") if cutover_to_host else None
+service_desired_count = 0 if cutover_to_host else 1
+
 # ---------------------------------------------------------------------------
 # Product Service Stack (api only — stateless, no worker, no database)
 # ---------------------------------------------------------------------------
@@ -117,6 +124,9 @@ stack = ProductServiceStack(
     shared_internal_alb_zone_id=platform.require_output("shared_internal_alb_zone_id"),
     listener_rule_priority=150,
     # Stateless: no db_secret_arn, no rds_security_group_id, no worker_command.
+    host_origin_domain=host_origin_domain,
+    host_origin_secret=host_origin_secret,
+    desired_count=service_desired_count,
 )
 
 # ---------------------------------------------------------------------------
