@@ -183,8 +183,23 @@ def _run(client: Any, fn: Callable[..., Any], **kwargs: Any) -> Any:
 # Tools
 # --------------------------------------------------------------------------
 
+# MCP tool annotations. Anthropic's connector directory requires every tool to
+# carry a ``title`` plus the applicable ``readOnlyHint``/``destructiveHint``, and
+# the hints drive Claude's auto-permissioning: read-only tools run without a
+# per-call prompt, destructive tools always prompt. Semantics follow the MCP
+# ``ToolAnnotations`` spec — ``destructiveHint`` marks tools that modify or delete
+# existing data (a pure create is additive, so it is not destructive), and
+# ``openWorldHint`` is set only on the two tools that call arbitrary
+# customer-supplied URLs (``run_job``, ``test_forwarder``); every other tool
+# talks solely to the smplkit API.
+_READ = {"readOnlyHint": True, "openWorldHint": False}
+_CREATE = {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}
+_MODIFY = {"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False}
+_EXECUTE = {"readOnlyHint": False, "destructiveHint": True, "openWorldHint": True}
+_PROBE = {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}
 
-@mcp.tool
+
+@mcp.tool(annotations={"title": "List jobs", **_READ})
 def list_jobs(
     name: str | None = None,
     kind: str | None = None,
@@ -204,7 +219,7 @@ def list_jobs(
     return _call(tools.list_jobs, name=name, kind=kind, limit=limit)
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Get job", **_READ})
 def get_job(job_id: str) -> dict[str, Any]:
     """Get one job's full configuration (schedule, target request, environments).
 
@@ -214,7 +229,7 @@ def get_job(job_id: str) -> dict[str, Any]:
     return _call(tools.get_job, job_id=job_id)
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Create job", **_CREATE})
 def create_job(
     name: str,
     url: str,
@@ -278,7 +293,7 @@ def create_job(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Update job", **_MODIFY})
 def update_job(
     job_id: str,
     name: str | None = None,
@@ -335,7 +350,7 @@ def update_job(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Delete job", **_MODIFY})
 def delete_job(job_id: str) -> dict[str, Any]:
     """Delete a job. Its run history is retained and the id may be reused later.
 
@@ -345,7 +360,7 @@ def delete_job(job_id: str) -> dict[str, Any]:
     return _call(tools.delete_job, job_id=job_id)
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Run job now", **_EXECUTE})
 def run_job(
     job_id: str,
     environment: str | None = None,
@@ -367,7 +382,7 @@ def run_job(
     return _call(tools.run_job, job_id=job_id, environment=environment, wait=wait)
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "List job runs", **_READ})
 def list_runs(
     job: str | None = None,
     status: str | None = None,
@@ -411,7 +426,7 @@ def list_runs(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Get job run", **_READ})
 def get_run(run_id: str) -> dict[str, Any]:
     """Get one run: status, timings, failure reason, and the captured HTTP response.
 
@@ -429,7 +444,7 @@ def get_run(run_id: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Create feature flag", **_CREATE})
 def create_flag(
     key: str,
     type: str,
@@ -460,7 +475,7 @@ def create_flag(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "List feature flags", **_READ})
 def list_flags(
     type: str | None = None,
     search: str | None = None,
@@ -483,7 +498,7 @@ def list_flags(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Get feature flag", **_READ})
 def get_flag(key: str) -> dict[str, Any]:
     """Get one flag's full config: values plus targeting per environment.
 
@@ -493,7 +508,7 @@ def get_flag(key: str) -> dict[str, Any]:
     return _run(FlagsClient(_api_key(), SETTINGS.flags_base_url), flags.get_flag, key=key)
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Set feature flag", **_MODIFY})
 def set_flag(
     key: str,
     environment: str = flags.DEFAULT_ENVIRONMENT,
@@ -529,7 +544,7 @@ def set_flag(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Delete feature flag", **_MODIFY})
 def delete_flag(key: str) -> dict[str, Any]:
     """Permanently delete a flag and all of its per-environment values and rules.
 
@@ -549,7 +564,7 @@ def delete_flag(key: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Create config", **_CREATE})
 def create_config(
     name: str,
     config_id: str | None = None,
@@ -581,7 +596,7 @@ def create_config(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "List configs", **_READ})
 def list_configs(
     parent: str | None = None,
     search: str | None = None,
@@ -603,7 +618,7 @@ def list_configs(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Get config", **_READ})
 def get_config(config_id: str) -> dict[str, Any]:
     """Get one config's full state: items plus per-environment overrides.
 
@@ -614,7 +629,7 @@ def get_config(config_id: str) -> dict[str, Any]:
                 config_id=config_id)
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Set config value", **_MODIFY})
 def set_config_value(
     config_id: str,
     key: str,
@@ -641,7 +656,7 @@ def set_config_value(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Delete config", **_MODIFY})
 def delete_config(config_id: str) -> dict[str, Any]:
     """Permanently delete a config and all of its keys and per-environment values.
 
@@ -661,7 +676,7 @@ def delete_config(config_id: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Set log level", **_MODIFY})
 def set_log_level(
     logger_id: str,
     level: str,
@@ -685,7 +700,7 @@ def set_log_level(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "List loggers", **_READ})
 def list_loggers(
     managed: bool | None = None,
     service: str | None = None,
@@ -712,7 +727,7 @@ def list_loggers(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Get logger", **_READ})
 def get_logger(logger_id: str) -> dict[str, Any]:
     """Get one logger's configuration: its account-wide default level and per-environment overrides.
 
@@ -727,7 +742,7 @@ def get_logger(logger_id: str) -> dict[str, Any]:
                 logger_id=logger_id)
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Reset logger", **_MODIFY})
 def reset_logger(logger_id: str) -> dict[str, Any]:
     """Stop managing a logger — delete its config so it reverts to the default.
 
@@ -743,7 +758,7 @@ def reset_logger(logger_id: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Search audit events", **_READ})
 def query_events(
     actor_type: str | None = None,
     actor_id: str | None = None,
@@ -789,7 +804,7 @@ def query_events(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Get audit event", **_READ})
 def get_event(event_id: str) -> dict[str, Any]:
     """Fetch one audit event by id, with its full detail.
 
@@ -804,7 +819,7 @@ def get_event(event_id: str) -> dict[str, Any]:
                 event_id=event_id)
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "List audit forwarders", **_READ})
 def list_forwarders(
     forwarder_type: str | None = None,
     limit: int | None = None,
@@ -823,7 +838,7 @@ def list_forwarders(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Create audit forwarder", **_CREATE})
 def create_forwarder(
     name: str,
     url: str,
@@ -869,7 +884,7 @@ def create_forwarder(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Test audit forwarder", **_PROBE})
 def test_forwarder(
     url: str,
     method: str = "POST",
@@ -904,7 +919,7 @@ def test_forwarder(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "Delete audit forwarder", **_MODIFY})
 def delete_forwarder(forwarder_id: str) -> dict[str, Any]:
     """Delete a forwarder. Past forwarded events are unaffected.
 
@@ -920,7 +935,7 @@ def delete_forwarder(forwarder_id: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
-@mcp.tool
+@mcp.tool(annotations={"title": "List environments", **_READ})
 def list_environments(
     classification: str | None = None,
     managed: bool | None = None,

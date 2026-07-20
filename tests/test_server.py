@@ -225,6 +225,64 @@ def test_all_platform_tools_registered():
     assert len(ALL_TOOLS) == 29
 
 
+# -- tool annotations (Anthropic connector-directory gate) ------------------
+
+# Every tool the directory reviews must carry a title plus the applicable
+# read-only/destructive hint; the classification below is the source of truth.
+READ_ONLY_TOOLS = {
+    "list_jobs", "get_job", "list_runs", "get_run",
+    "list_flags", "get_flag", "list_configs", "get_config",
+    "list_loggers", "get_logger", "query_events", "get_event",
+    "list_forwarders", "list_environments",
+}
+DESTRUCTIVE_TOOLS = {
+    "update_job", "delete_job", "run_job",
+    "set_flag", "delete_flag", "set_config_value", "delete_config",
+    "set_log_level", "reset_logger", "delete_forwarder",
+}
+# Writes that only add data (or dry-run) — not read-only, not destructive.
+ADDITIVE_TOOLS = {
+    "create_job", "create_flag", "create_config", "create_forwarder",
+    "test_forwarder",
+}
+# Tools that reach arbitrary customer-supplied URLs, not just the smplkit API.
+OPEN_WORLD_TOOLS = {"run_job", "test_forwarder"}
+
+
+def test_annotation_classification_partitions_every_tool():
+    assert READ_ONLY_TOOLS | DESTRUCTIVE_TOOLS | ADDITIVE_TOOLS == ALL_TOOLS
+    # mutually exclusive — no tool is in two buckets
+    assert not (READ_ONLY_TOOLS & DESTRUCTIVE_TOOLS)
+    assert not (READ_ONLY_TOOLS & ADDITIVE_TOOLS)
+    assert not (DESTRUCTIVE_TOOLS & ADDITIVE_TOOLS)
+
+
+def test_every_tool_meets_directory_annotation_gate():
+    registered = asyncio.run(server.mcp.list_tools())
+    for tool in registered:
+        ann = tool.annotations
+        assert ann is not None, f"{tool.name} has no annotations"
+        # Gate 1: a human-readable title.
+        assert ann.title, f"{tool.name} is missing a title"
+        # Gate 2: the applicable read-only/destructive hint.
+        if tool.name in READ_ONLY_TOOLS:
+            assert ann.readOnlyHint is True, f"{tool.name} should be read-only"
+        elif tool.name in DESTRUCTIVE_TOOLS:
+            assert ann.readOnlyHint is False and ann.destructiveHint is True, (
+                f"{tool.name} should be destructive"
+            )
+        else:  # additive write
+            assert ann.readOnlyHint is False and ann.destructiveHint is False, (
+                f"{tool.name} should be an additive write"
+            )
+        # openWorldHint is set True only for the arbitrary-URL callers.
+        assert ann.openWorldHint is (tool.name in OPEN_WORLD_TOOLS), (
+            f"{tool.name} openWorldHint misclassified"
+        )
+        # Directory hard limit: tool names are 64 characters or fewer.
+        assert len(tool.name) <= 64, f"{tool.name} exceeds 64 characters"
+
+
 def test_default_environment_constant():
     assert tools.DEFAULT_ENVIRONMENT == "production"
 
