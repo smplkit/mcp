@@ -29,14 +29,14 @@ _KEYPAIR = RSAKeyPair.generate()
 
 
 def _enabled_settings(**overrides) -> oauth.OAuthSettings:
-    base = dict(
-        authorization_servers=(AS_URL,),
-        resource_base_url=RESOURCE_BASE,
-        mcp_path=MCP_PATH,
-        public_key=_KEYPAIR.public_key,
-        issuer=AS_URL,
-        scopes_supported=("jobs:write",),
-    )
+    base = {
+        "authorization_servers": (AS_URL,),
+        "resource_base_url": RESOURCE_BASE,
+        "mcp_path": MCP_PATH,
+        "public_key": _KEYPAIR.public_key,
+        "issuer": AS_URL,
+        "scopes_supported": ("jobs:write",),
+    }
     base.update(overrides)
     return oauth.OAuthSettings(**base)
 

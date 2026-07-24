@@ -168,7 +168,7 @@ class TestRunJob:
 
     def test_ssrf_failure_gets_hint(self, fake_client):
         fake_client.run_now_status = "FAILED"
-        fake_client.runs  # noqa
+        fake_client.runs
         fake_client.run_now_status = "FAILED"
         # seed a failed run with SSRF reason directly
         resp = fake_client.run_job("j")

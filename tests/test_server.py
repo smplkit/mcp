@@ -113,27 +113,27 @@ class TestToolWrappers:
 
 # (server tool, product module, module function name, call kwargs)
 _PRODUCT_WRAPPERS = [
-    (server.create_flag, "flags", "create_flag", dict(key="f", type="boolean", default=False)),
+    (server.create_flag, "flags", "create_flag", {"key": "f", "type": "boolean", "default": False}),
     (server.list_flags, "flags", "list_flags", {}),
-    (server.get_flag, "flags", "get_flag", dict(key="f")),
-    (server.set_flag, "flags", "set_flag", dict(key="f", value=True)),
-    (server.delete_flag, "flags", "delete_flag", dict(key="f")),
-    (server.create_config, "configs", "create_config", dict(name="C")),
+    (server.get_flag, "flags", "get_flag", {"key": "f"}),
+    (server.set_flag, "flags", "set_flag", {"key": "f", "value": True}),
+    (server.delete_flag, "flags", "delete_flag", {"key": "f"}),
+    (server.create_config, "configs", "create_config", {"name": "C"}),
     (server.list_configs, "configs", "list_configs", {}),
-    (server.get_config, "configs", "get_config", dict(config_id="c")),
-    (server.set_config_value, "configs", "set_config_value", dict(config_id="c", key="k", value=1)),
-    (server.delete_config, "configs", "delete_config", dict(config_id="c")),
-    (server.set_log_level, "loggers", "set_log_level", dict(logger_id="l", level="DEBUG")),
+    (server.get_config, "configs", "get_config", {"config_id": "c"}),
+    (server.set_config_value, "configs", "set_config_value", {"config_id": "c", "key": "k", "value": 1}),
+    (server.delete_config, "configs", "delete_config", {"config_id": "c"}),
+    (server.set_log_level, "loggers", "set_log_level", {"logger_id": "l", "level": "DEBUG"}),
     (server.list_loggers, "loggers", "list_loggers", {}),
-    (server.get_logger, "loggers", "get_logger", dict(logger_id="l")),
-    (server.reset_logger, "loggers", "reset_logger", dict(logger_id="l")),
-    (server.query_events, "audit", "query_events", dict(severity="ERROR")),
-    (server.get_event, "audit", "get_event", dict(event_id="e")),
+    (server.get_logger, "loggers", "get_logger", {"logger_id": "l"}),
+    (server.reset_logger, "loggers", "reset_logger", {"logger_id": "l"}),
+    (server.query_events, "audit", "query_events", {"severity": "ERROR"}),
+    (server.get_event, "audit", "get_event", {"event_id": "e"}),
     (server.list_forwarders, "audit", "list_forwarders", {}),
     (server.create_forwarder, "audit", "create_forwarder",
-     dict(name="F", url="https://siem.example.com/in")),
-    (server.test_forwarder, "audit", "test_forwarder", dict(url="https://siem.example.com/in")),
-    (server.delete_forwarder, "audit", "delete_forwarder", dict(forwarder_id="fwd")),
+     {"name": "F", "url": "https://siem.example.com/in"}),
+    (server.test_forwarder, "audit", "test_forwarder", {"url": "https://siem.example.com/in"}),
+    (server.delete_forwarder, "audit", "delete_forwarder", {"forwarder_id": "fwd"}),
     (server.list_environments, "environments", "list_environments", {}),
 ]
 
@@ -219,7 +219,7 @@ def test_all_platform_tools_registered():
     registered = asyncio.run(server.mcp.list_tools())
     names = {t.name for t in registered}
     # The original eight Jobs tools are unchanged and still present.
-    assert JOBS_TOOLS <= names
+    assert names >= JOBS_TOOLS
     # Plus the full platform surface — 21 new tools, 29 total.
     assert names == ALL_TOOLS
     assert len(ALL_TOOLS) == 29

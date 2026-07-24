@@ -23,7 +23,6 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements-test.txt
-          pip install 'ruff==0.15.12'
 
       - name: Lint
         run: ruff check src tests
