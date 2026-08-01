@@ -2,6 +2,8 @@
 
 # smplkit MCP Server
 
+[![smplkit/mcp MCP server](https://glama.ai/mcp/servers/smplkit/mcp/badges/score.svg)](https://glama.ai/mcp/servers/smplkit/mcp)
+
 A hosted, agent-native [Model Context Protocol](https://modelcontextprotocol.io)
 server — the gateway that lets an AI agent (Claude Code, Claude Desktop, Cursor,
 …) **operate the whole [smplkit](https://smplkit.com) platform** on your behalf,
