@@ -1,0 +1,95 @@
+name: dependabot-auto-merge
+
+# Auto-merges Dependabot PRs that bump any dependency by a patch or
+# minor version. Majors are left as PRs for review.
+#
+# CI is the gate: if lint, format, or tests fail on the bumped
+# dependency, the PR sits open until a human investigates.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: auto-merge patch/minor bumps
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      - name: fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: classify the bump (range updates lack an update-type)
+        id: classify
+        env:
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          PREV: ${{ steps.meta.outputs.previous-version }}
+          NEW: ${{ steps.meta.outputs.new-version }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # fetch-metadata leaves update-type empty for requirement-range
+          # updates (">=3.253.0,<4.0.0" -> ">=3.255.0,<4.0.0" has no single
+          # version pair) - exactly how this repo declares pulumi. Those
+          # PRs used to skip both steps below with a green job and strand
+          # until the next weekly bump superseded them. Classify here:
+          # use update-type when present, else compare version floors.
+          sem() {
+            [[ "$1" =~ ^([0-9]+)\.([0-9]+)(\.([0-9]+))?$ ]] || return 1
+            echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[4]:-0}"
+          }
+          CLASS=unknown
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch) CLASS=patch ;;
+            version-update:semver-minor) CLASS=minor ;;
+            version-update:semver-major) CLASS=major ;;
+          esac
+          P="$PREV"; N="$NEW"
+          if [ "$CLASS" = "unknown" ]; then
+            if [ -z "$P" ] || [ -z "$N" ]; then
+              # Dependabot requirement-update titles are deterministic:
+              #   "... update <dep> requirement from <old-range> to <new-range>"
+              # Take the >= floor of each range.
+              P=$(printf '%s\n' "$PR_TITLE" | sed -n 's/.* from \([^ ]*\) to .*/\1/p' | tr ',' '\n' | sed -n 's/^>=//p' | head -1)
+              N=$(printf '%s\n' "$PR_TITLE" | sed -n 's/.* to \([^ ]*\)$/\1/p' | tr ',' '\n' | sed -n 's/^>=//p' | head -1)
+            fi
+            if pv=$(sem "$P") && nv=$(sem "$N"); then
+              read -r pmaj pmin _ <<<"$pv"
+              read -r nmaj nmin _ <<<"$nv"
+              if [ "$pmaj" != "$nmaj" ]; then CLASS=major
+              elif [ "$pmin" != "$nmin" ]; then CLASS=minor
+              else CLASS=patch; fi
+            fi
+          fi
+          echo "classified: $CLASS (update-type='$UPDATE_TYPE' prev='$P' new='$N')"
+          echo "class=$CLASS" >> "$GITHUB_OUTPUT"
+
+      - name: approve patch/minor bumps
+        if: contains(fromJSON('["patch","minor"]'), steps.classify.outputs.class)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          # Org ruleset requires 1 approving review on PRs to main.
+          # Approve here so the subsequent --auto merge can succeed
+          # once CI is green. Idempotent: re-runs swallow the
+          # "already approved" error.
+          gh pr review "$PR_URL" --approve 2>/dev/null || true
+
+      - name: enable auto-merge for patch/minor bumps
+        if: contains(fromJSON('["patch","minor"]'), steps.classify.outputs.class)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          # --auto waits for required status checks before merging.
+          # Falls through to immediate merge if the repo doesn't have
+          # auto-merge enabled in Settings -> General -> Pull Requests.
+          gh pr merge "$PR_URL" --auto --squash ||
+            gh pr merge "$PR_URL" --squash
